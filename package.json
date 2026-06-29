@@ -1,0 +1,36 @@
+{
+  "name": "my-ai-coach",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Dashboard de suivi sportif (running/fitness) boosté à l'IA (Garmin + Gemini)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "spike:garmin": "node scripts/garmin-login-spike.ts"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^6.26.2",
+    "recharts": "^3.9.0"
+  },
+  "devDependencies": {
+    "@netlify/functions": "^2.8.1",
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/node": "^22.7.4",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.2",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.0"
+  }
+}

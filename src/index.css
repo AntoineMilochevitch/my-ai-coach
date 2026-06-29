@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* Rendu de l'analyse IA (react-markdown) — Tailwind v4 réinitialise ces balises. */
+.markdown h2 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-top: 1rem;
+  margin-bottom: 0.25rem;
+}
+.markdown h3 {
+  font-weight: 600;
+  margin-top: 0.75rem;
+}
+.markdown p {
+  margin: 0.35rem 0;
+}
+.markdown ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+  margin: 0.35rem 0;
+}
+.markdown li {
+  margin-bottom: 0.2rem;
+}
+.markdown strong {
+  font-weight: 600;
+}
