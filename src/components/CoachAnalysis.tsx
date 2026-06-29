@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import Markdown from "react-markdown";
 import { supabase } from "../lib/supabase";
 import { aiAnalyze } from "../lib/api";
+import Spinner from "./Spinner";
 
 /** Section « Coach IA » : génère et affiche une analyse Gemini de la période. */
 export default function CoachAnalysis({ days }: { days: number }) {
@@ -57,7 +58,15 @@ export default function CoachAnalysis({ days }: { days: number }) {
           disabled={busy}
           className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
         >
-          {busy ? "Analyse en cours…" : content ? "Régénérer" : "Générer une analyse"}
+          {busy ? (
+            <span className="inline-flex items-center gap-2">
+              <Spinner /> Analyse en cours…
+            </span>
+          ) : content ? (
+            "Régénérer"
+          ) : (
+            "Générer une analyse"
+          )}
         </button>
       </div>
 
@@ -65,7 +74,9 @@ export default function CoachAnalysis({ days }: { days: number }) {
 
       <div className="mt-4">
         {busy ? (
-          <p className="text-sm text-neutral-500">Le coach analyse tes données…</p>
+          <p className="flex items-center gap-2 text-sm text-neutral-500">
+            <Spinner /> Le coach analyse tes données…
+          </p>
         ) : content ? (
           <div className="markdown text-neutral-700 dark:text-neutral-300">
             <Markdown>{content}</Markdown>

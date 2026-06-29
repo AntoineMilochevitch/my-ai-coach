@@ -1,19 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
-import Modal from "../components/Modal";
-import GarminPanel from "../components/GarminPanel";
-import HeaderActions from "../components/HeaderActions";
+import Layout from "../components/Layout";
+import Spinner from "../components/Spinner";
 import CoachAnalysis from "../components/CoachAnalysis";
 import { HrTrendChart, PaceTrendChart, VolumeChart } from "../components/Charts";
 import type { Activity } from "../lib/types";
 import { formatDuration, formatKm, formatPace, weekStart } from "../lib/format";
-
-const STATUS_COLOR: Record<string, string> = {
-  connected: "bg-green-500",
-  error: "bg-red-500",
-  mfa_pending: "bg-amber-500",
-};
 
 const RANGES = [
   { key: "day", label: "Jour", days: 30, bucket: "day" },
@@ -25,15 +17,12 @@ type RangeKey = (typeof RANGES)[number]["key"];
 const prettySport = (s: string) => s.replaceAll("_", " ");
 
 export default function Dashboard() {
-  const { session, signOut } = useAuth();
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [garminStatus, setGarminStatus] = useState("disconnected");
-  const [lastSync, setLastSync] = useState<string | null>(null);
   const [vo2max, setVo2max] = useState<number | null>(null);
   const [vo2Source, setVo2Source] = useState<string | null>(null);
   const [restingHr, setRestingHr] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [rangeKey, setRangeKey] = useState<RangeKey>("week");
   const [sport, setSport] = useState<string>("all");
 
@@ -41,6 +30,7 @@ export default function Dashboard() {
 
   const reload = useCallback(async () => {
     setError(null);
+    setLoading(true);
     const { data: acts, error: aErr } = await supabase
       .from("activities")
       .select(
@@ -50,16 +40,10 @@ export default function Dashboard() {
       .limit(500);
     if (aErr) {
       setError(aErr.message);
+      setLoading(false);
       return;
     }
     setActivities(acts ?? []);
-
-    const { data: ga } = await supabase
-      .from("garmin_accounts")
-      .select("status, last_sync_at")
-      .maybeSingle();
-    setGarminStatus(ga?.status ?? "disconnected");
-    setLastSync(ga?.last_sync_at ?? null);
 
     const { data: dm } = await supabase
       .from("daily_metrics")
@@ -70,6 +54,7 @@ export default function Dashboard() {
     setVo2max(dm?.vo2max ?? null);
     setVo2Source(dm?.vo2max_source ?? null);
     setRestingHr(dm?.resting_hr ?? null);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -114,27 +99,21 @@ export default function Dashboard() {
     return { totalKm, longest, bestPace, bestWeek };
   }, [filtered]);
 
-  const dot = STATUS_COLOR[garminStatus] ?? "bg-neutral-400";
   const selectCls =
     "rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300";
 
   return (
-    <div className="min-h-full bg-neutral-50 dark:bg-neutral-950">
-      <header className="flex items-center justify-between gap-3 border-b border-neutral-200 bg-white px-4 py-4 sm:px-6 dark:border-neutral-800 dark:bg-neutral-900">
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
-            my-ai-coach
-          </h1>
-          <p className="truncate text-xs text-neutral-500">{session?.user.email}</p>
-        </div>
-        <HeaderActions dot={dot} onGarmin={() => setModalOpen(true)} onSignOut={signOut} />
-      </header>
-
-      <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
+    <Layout>
+      <main className="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             Erreur : {error}
           </div>
+        )}
+        {loading && (
+          <p className="flex items-center gap-2 text-sm text-neutral-500">
+            <Spinner /> Chargement de tes données…
+          </p>
         )}
 
         {/* Barre d'outils : zoom timeline + tri par sport */}
@@ -205,8 +184,8 @@ export default function Dashboard() {
           </h2>
           {filtered.length === 0 ? (
             <p className="mt-2 text-sm text-neutral-500">
-              Aucune activité sur cette période. Connecte/synchronise ton Garmin via le
-              bouton « Garmin » en haut.
+              Aucune activité sur cette période. Connecte/synchronise ton Garmin depuis
+              ton Profil (icône en haut à droite).
             </p>
           ) : (
             <div className="mt-3 overflow-x-auto">
@@ -251,11 +230,7 @@ export default function Dashboard() {
           )}
         </section>
       </main>
-
-      <Modal open={modalOpen} title="Connexion Garmin" onClose={() => setModalOpen(false)}>
-        <GarminPanel status={garminStatus} lastSync={lastSync} onSynced={reload} />
-      </Modal>
-    </div>
+    </Layout>
   );
 }
 

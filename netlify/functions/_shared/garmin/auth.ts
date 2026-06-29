@@ -501,3 +501,28 @@ export async function connectApi<T = any>(accessToken: string, path: string): Pr
   if (resp.status === 204) return {} as T;
   return (await resp.json()) as T;
 }
+
+/** Appel API POST authentifié (création/planification de séance, etc.). */
+export async function connectApiPost<T = any>(
+  accessToken: string,
+  path: string,
+  body: unknown,
+): Promise<T> {
+  const resp = await fetch(`${CONNECT_API}/${path.replace(/^\//, "")}`, {
+    method: "POST",
+    headers: nativeHeaders({
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    }),
+    body: JSON.stringify(body),
+  });
+  if (resp.status === 401 || resp.status === 403)
+    throw new GarminAuthError(`API a rejeté le token (HTTP ${resp.status})`);
+  if (!resp.ok)
+    throw new GarminConnectionError(
+      `API POST ${resp.status} sur ${path}: ${(await resp.text()).slice(0, 200)}`,
+    );
+  if (resp.status === 204) return {} as T;
+  return (await resp.json()) as T;
+}
