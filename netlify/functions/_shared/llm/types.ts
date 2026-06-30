@@ -28,7 +28,8 @@ export interface GenerateOpts {
   maxOutputTokens?: number;
   thinkingBudget?: number; // Gemini 2.5 uniquement
   signal?: AbortSignal;
-  timeoutMs?: number; // borne le temps d'attente d'une réponse (anti-blocage / 504)
+  timeoutMs?: number; // budget de temps TOTAL (réparti entre les essais de repli)
+  perAttemptMs?: number; // plafond par essai → garantit qu'un repli est tenté si un modèle pend
 }
 
 export interface StreamChunk {
@@ -81,10 +82,10 @@ export function timeoutController(
   }
   return { signal: ctrl.signal, clear: () => clearTimeout(timer) };
 }
-// On NE retente PAS le 429 (limite de débit) : on bascule plutôt vite vers un
-// autre modèle (voir getLlm + repli). Seules les erreurs vraiment transitoires
-// (surcharge serveur) sont retentées.
-const RETRYABLE = new Set([500, 503, 529]);
+// On ne retente quasiment rien sur le MÊME modèle : limite (429), surcharge
+// (503/529) → on bascule vite vers un AUTRE modèle (voir getLlm + repli). Seul un
+// 500 (erreur serveur ponctuelle) est retenté une fois.
+const RETRYABLE = new Set([500]);
 
 /** POST avec retry exponentiel court sur surcharge temporaire. */
 export async function fetchRetry(

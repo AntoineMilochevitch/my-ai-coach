@@ -136,9 +136,10 @@ export async function detectAction(
     args?: Record<string, unknown>;
   }>(SYSTEM, `Message de l'athlète : ${message}`, SCHEMA, {
     temperature: 0.1,
-    maxOutputTokens: 1024,
-    thinkingBudget: 0,
-    timeoutMs: 7000, // borné : reste sous le timeout Netlify (chemin synchrone)
+    maxOutputTokens: 2048, // marge pour la réflexion des modèles 2.5 + le JSON
+    thinkingBudget: 256, // petit budget POSITIF (0 est refusé par certains 2.5)
+    timeoutMs: 7000, // budget total (sous le timeout Netlify, chemin synchrone)
+    perAttemptMs: 3500, // un modèle lent/surchargé laisse la place au repli
   });
   const kind = data.action as ActionKind;
   if (!VALID.includes(kind)) return { action: null, usage };

@@ -51,8 +51,8 @@ export default async (req: Request): Promise<Response> => {
       fat_g?: number;
     }>(SYSTEM, `Repas : ${description}`, SCHEMA, {
       temperature: 0.2,
-      maxOutputTokens: 1024,
-      thinkingBudget: 0,
+      maxOutputTokens: 2048,
+      thinkingBudget: 256,
       timeoutMs: 8000,
     });
     await recordUsage(sb, user.id, "estimate", usage);

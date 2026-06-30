@@ -100,7 +100,9 @@ export default async (req: Request): Promise<Response> => {
             429,
           );
         return json(
-          { error: "Le coach met trop de temps à répondre. Réessaie dans un instant." },
+          {
+            error: `Le coach n'a pas pu répondre (${(e as Error).message.slice(0, 140)}). Réessaie ou change de modèle dans ton profil.`,
+          },
           503,
         );
       }
@@ -338,6 +340,7 @@ export default async (req: Request): Promise<Response> => {
         maxOutputTokens: 3072,
         signal: req.signal,
         timeoutMs: 6000, // borne l'établissement de la connexion (anti-504)
+        perAttemptMs: 4000, // laisse une chance au repli si un modèle pend
       });
     } catch (e) {
       // Échec avant tout token : on retire le message user pour ne pas le laisser

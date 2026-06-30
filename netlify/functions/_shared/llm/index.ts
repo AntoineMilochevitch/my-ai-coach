@@ -37,7 +37,7 @@ export function isRateLimit(err: unknown): boolean {
   return /\b429\b|resource_exhausted|rate.?limit|quota|exhausted|overloaded|\b529\b/i.test(m);
 }
 
-/** Erreur justifiant d'essayer un AUTRE modèle (limite, indisponibilité, ou timeout). */
+/** Erreur justifiant d'essayer un AUTRE modèle (limite, surcharge, indispo, timeout). */
 function shouldFallback(err: unknown): boolean {
   const m = (err as Error)?.message ?? "";
   const name = (err as { name?: string })?.name ?? "";
@@ -45,7 +45,9 @@ function shouldFallback(err: unknown): boolean {
     isRateLimit(err) ||
     name === "AbortError" ||
     name === "TimeoutError" ||
-    /\b403\b|\b404\b|not found|unavailable|unsupported|abort|timeout|délai/i.test(m)
+    /\b(403|404|500|503|529)\b|not found|unavailable|unsupported|abort|timeout|délai|surcharg|overload/i.test(
+      m,
+    )
   );
 }
 
@@ -60,15 +62,22 @@ export function getLlm(provider: Provider, apiKey: string, model: string): LlmCl
     fn: (c: LlmClient, o: GenerateOpts | undefined) => Promise<T>,
   ): Promise<T> {
     const total = opts?.timeoutMs;
+    const cap = opts?.perAttemptMs;
     const start = Date.now();
     let lastErr: unknown;
     for (let i = 0; i < clients.length; i++) {
       let o = opts;
+      let attemptMs: number | undefined;
       if (total) {
         const remaining = total - (Date.now() - start);
-        if (i > 0 && remaining < 800) break; // budget épuisé
-        o = { ...opts, timeoutMs: Math.max(remaining, 800) };
+        if (i > 0 && remaining < 600) break; // budget épuisé
+        // Plafond par essai : un modèle qui pend ne consomme pas tout le budget,
+        // ce qui laisse une vraie chance au repli.
+        attemptMs = cap ? Math.min(remaining, cap) : remaining;
+      } else if (cap) {
+        attemptMs = cap;
       }
+      if (attemptMs != null) o = { ...opts, timeoutMs: attemptMs };
       try {
         return await fn(clients[i], o);
       } catch (e) {
