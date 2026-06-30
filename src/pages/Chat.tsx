@@ -185,7 +185,7 @@ export default function Chat() {
 
   return (
     <Layout>
-      <div className="relative mx-auto flex w-full max-w-5xl flex-1 overflow-hidden">
+      <div className="relative flex w-full flex-1 overflow-hidden">
         {/* Overlay mobile */}
         {sidebarOpen && (
           <div
@@ -239,8 +239,9 @@ export default function Chat() {
           </ul>
         </aside>
 
-        {/* Zone de chat */}
-        <main className="flex flex-1 flex-col overflow-hidden p-4">
+        {/* Zone de chat : occupe la place restante, contenu centré et borné en largeur */}
+        <main className="flex flex-1 flex-col overflow-hidden">
+          <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col overflow-hidden p-4">
           <div className="mb-2 flex items-center gap-2">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -327,6 +328,7 @@ export default function Chat() {
               Envoyer
             </button>
           </form>
+          </div>
         </main>
       </div>
     </Layout>
