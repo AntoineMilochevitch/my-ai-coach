@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { supabase } from "../lib/supabase";
-import { listModels, setAiConfig } from "../lib/api";
+import { listModels, setAiConfig, type AiProvider } from "../lib/api";
 import GarminPanel from "../components/GarminPanel";
 import Layout from "../components/Layout";
 import Spinner from "../components/Spinner";
@@ -10,17 +10,42 @@ interface ModelOption {
   label: string;
 }
 
+const PROVIDERS: { id: AiProvider; label: string; placeholder: string; keyUrl: string }[] = [
+  {
+    id: "gemini",
+    label: "Google Gemini",
+    placeholder: "AIza…",
+    keyUrl: "https://aistudio.google.com/apikey",
+  },
+  {
+    id: "anthropic",
+    label: "Anthropic (Claude)",
+    placeholder: "sk-ant-…",
+    keyUrl: "https://console.anthropic.com/settings/keys",
+  },
+  {
+    id: "openai",
+    label: "OpenAI (ChatGPT)",
+    placeholder: "sk-…",
+    keyUrl: "https://platform.openai.com/api-keys",
+  },
+];
+
 export default function Profile() {
+  const [provider, setProvider] = useState<AiProvider>("gemini");
   const [model, setModel] = useState("");
   const [models, setModels] = useState<ModelOption[]>([]);
-  const [keySet, setKeySet] = useState(false);
-  const [geminiKey, setGeminiKey] = useState("");
+  const [keys, setKeys] = useState<Record<string, boolean>>({});
+  const [apiKey, setApiKey] = useState("");
   const [loadingModels, setLoadingModels] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [garminStatus, setGarminStatus] = useState("disconnected");
   const [lastSync, setLastSync] = useState<string | null>(null);
+
+  const meta = PROVIDERS.find((p) => p.id === provider)!;
+  const keySet = Boolean(keys[provider]);
 
   const loadGarmin = useCallback(async () => {
     const { data: ga } = await supabase
@@ -31,16 +56,17 @@ export default function Profile() {
     setLastSync(ga?.last_sync_at ?? null);
   }, []);
 
-  const fetchModels = useCallback(async (key?: string) => {
+  const fetchModels = useCallback(async (prov: AiProvider, key?: string) => {
     setLoadingModels(true);
     setError(null);
     try {
-      const res = await listModels(key);
+      const res = await listModels(prov, key);
       setModels(res.models);
-      setKeySet(res.gemini_key_set);
+      setKeys((k) => ({ ...k, [prov]: true }));
       return res.models;
     } catch (err) {
       setError((err as Error).message);
+      setModels([]);
       return [];
     } finally {
       setLoadingModels(false);
@@ -49,38 +75,49 @@ export default function Profile() {
 
   useEffect(() => {
     (async () => {
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("settings")
-        .maybeSingle();
+      const { data: prof } = await supabase.from("profiles").select("settings").maybeSingle();
       const s: any = prof?.settings ?? {};
+      const prov: AiProvider = ["gemini", "anthropic", "openai"].includes(s.ai_provider)
+        ? s.ai_provider
+        : "gemini";
+      const ks: Record<string, boolean> = s.keys ?? (s.gemini_key_set ? { gemini: true } : {});
+      setProvider(prov);
+      setKeys(ks);
       if (s.ai_model) setModel(s.ai_model);
-      if (s.gemini_key_set) {
-        setKeySet(true);
-        fetchModels(); // charge les modèles avec la clé déjà stockée
-      }
+      if (ks[prov]) fetchModels(prov); // modèles avec la clé déjà stockée
     })();
     loadGarmin();
   }, [fetchModels, loadGarmin]);
 
-  // Étape 1+2 : valider la clé puis charger les modèles.
+  async function onProviderChange(prov: AiProvider) {
+    setProvider(prov);
+    setApiKey("");
+    setModels([]);
+    setModel("");
+    setMsg(null);
+    setError(null);
+    await setAiConfig({ provider: prov }).catch(() => {});
+    if (keys[prov]) fetchModels(prov);
+  }
+
+  // Valider la clé puis charger les modèles (la Function la chiffre et la stocke).
   async function validateKey(e: FormEvent) {
     e.preventDefault();
     setMsg(null);
-    const list = await fetchModels(geminiKey.trim() || undefined);
+    const list = await fetchModels(provider, apiKey.trim() || undefined);
     if (list.length) {
-      setGeminiKey("");
+      setApiKey("");
       setMsg("Clé validée et modèles chargés. Choisis ton modèle ci-dessous.");
     }
   }
 
-  // Étape 3 : choisir un modèle (persisté immédiatement).
+  // Choisir un modèle (persisté immédiatement avec le provider).
   async function onModelChange(value: string) {
     setModel(value);
     setMsg(null);
     setError(null);
     try {
-      await setAiConfig({ model: value });
+      await setAiConfig({ provider, model: value });
       setMsg("Modèle enregistré.");
     } catch (err) {
       setError((err as Error).message);
@@ -105,14 +142,38 @@ export default function Profile() {
             Assistant IA
           </h2>
           <p className="mt-1 text-sm text-neutral-500">
-            Renseigne ta clé Gemini : on récupère alors les modèles disponibles pour
-            ton compte, puis tu choisis. (Claude, ChatGPT seront ajoutés plus tard.)
+            Choisis ton fournisseur, renseigne ta clé API : on récupère les modèles
+            disponibles, puis tu sélectionnes celui à utiliser.
           </p>
+
+          {/* 0) Fournisseur */}
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+              Fournisseur
+            </label>
+            <div className="mt-1 inline-flex flex-wrap gap-1.5">
+              {PROVIDERS.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => onProviderChange(p.id)}
+                  className={`rounded-lg border px-3 py-1.5 text-sm transition ${
+                    provider === p.id
+                      ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
+                      : "border-neutral-300 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                  }`}
+                >
+                  {p.label}
+                  {keys[p.id] && " ✓"}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* 1) Clé */}
           <form onSubmit={validateKey} className="mt-4 space-y-2">
             <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">
-              Clé API Gemini{" "}
+              Clé API {meta.label}{" "}
               {keySet && (
                 <span className="ml-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">
                   définie
@@ -122,9 +183,9 @@ export default function Profile() {
             <div className="flex gap-2">
               <input
                 type="password"
-                placeholder={keySet ? "•••••••• (laisser vide pour conserver)" : "AIza…"}
-                value={geminiKey}
-                onChange={(e) => setGeminiKey(e.target.value)}
+                placeholder={keySet ? "•••••••• (laisser vide pour conserver)" : meta.placeholder}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
                 className={inputCls}
               />
               <button type="submit" disabled={loadingModels} className={`shrink-0 ${btnCls}`}>
@@ -133,13 +194,8 @@ export default function Profile() {
             </div>
             <p className="text-xs text-neutral-500">
               Obtiens-la sur{" "}
-              <a
-                href="https://aistudio.google.com/apikey"
-                target="_blank"
-                rel="noreferrer"
-                className="underline"
-              >
-                aistudio.google.com/apikey
+              <a href={meta.keyUrl} target="_blank" rel="noreferrer" className="underline">
+                {meta.keyUrl.replace(/^https:\/\//, "")}
               </a>
               . Chiffrée, jamais renvoyée au navigateur.
             </p>
@@ -160,7 +216,9 @@ export default function Profile() {
                 <option value="">Renseigne ta clé pour charger les modèles…</option>
               ) : (
                 <>
-                  {!model && <option value="">— choisis un modèle —</option>}
+                  {!models.some((m) => m.id === model) && (
+                    <option value="">— choisis un modèle —</option>
+                  )}
                   {models.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.label} ({m.id})

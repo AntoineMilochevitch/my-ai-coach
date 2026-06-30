@@ -1,14 +1,18 @@
 /**
  * Function : chat — conversation avec le coach, contextualisée par les données
  * de l'utilisateur (par sport) + RAG pgvector + historique de la conversation.
+ * Multi-provider (Gemini / Claude / OpenAI), en streaming.
  *
  * POST { conversationId?, message }  + Authorization: Bearer <jwt supabase>
- *  -> { conversationId, reply }
+ *  -> flux texte (text/plain) + en-tête x-conversation-id
  */
 import { requireUser, HttpError, json } from "./_shared/supabase.ts";
-import { type GeminiContent } from "./_shared/gemini.ts";
+import { getLlm, type ChatTurn, type TokenUsage } from "./_shared/llm/index.ts";
 import { embed } from "./_shared/embeddings.ts";
 import { loadAiConfig } from "./_shared/ai-config.ts";
+import { checkQuota, recordUsage } from "./_shared/usage.ts";
+
+const MAX_MESSAGE_CHARS = 4000;
 
 const SYSTEM_BASE = `Tu es le coach sportif personnel de cet athlète (course/vélo/fitness).
 Tu discutes avec lui de sa forme, de son entraînement et de son plan d'entraînement.
@@ -18,6 +22,7 @@ Règles :
   unités lisibles : km, mm:ss/km, h:mm, bpm). Distingue bien les sports.
 - N'invente JAMAIS une donnée absente ; si une info manque, dis-le et propose comment
   l'obtenir (synchroniser, préciser un objectif...).
+- Tiens compte des NOTES de l'athlète (ressenti, blessures, contexte) quand elles existent.
 - Pose une question de clarification si la demande est ambiguë.
 - Reste dans ton rôle de coach ; pas de conseils médicaux au-delà du bon sens.`;
 
@@ -31,9 +36,12 @@ export default async (req: Request): Promise<Response> => {
   try {
     const { user, sb } = await requireUser(req);
     const body = await req.json().catch(() => ({}));
-    const message = String(body.message ?? "").trim();
+    const message = String(body.message ?? "").trim().slice(0, MAX_MESSAGE_CHARS);
     if (!message) return json({ error: "message requis" }, 400);
-    const cfg = await loadAiConfig(sb, user.id);
+
+    await checkQuota(sb, user.id, "chat");
+    const cfg = await loadAiConfig(sb, user);
+    const llm = getLlm(cfg.provider, cfg.apiKey, cfg.model);
     let conversationId: string | null = body.conversationId ?? null;
 
     // Conversation : vérifie l'appartenance ou en crée une.
@@ -57,51 +65,67 @@ export default async (req: Request): Promise<Response> => {
     }
 
     // Enregistre le message utilisateur.
-    await sb
-      .from("chat_messages")
-      .insert({ conversation_id: conversationId, user_id: user.id, role: "user", content: message });
+    await sb.from("chat_messages").insert({
+      conversation_id: conversationId,
+      user_id: user.id,
+      role: "user",
+      content: message,
+    });
 
     // --- Contexte athlète (scopé au user) ---
     const since90 = new Date(Date.now() - 90 * 86400000).toISOString();
-    const [actsRes, metricsRes, sleepRes, analysisRes, historyRes] = await Promise.all([
-      sb
-        .from("activities")
-        .select("activity_type, start_time, distance_m, duration_s, avg_hr, avg_pace_s_per_km")
-        .eq("user_id", user.id)
-        .gte("start_time", since90)
-        .order("start_time", { ascending: false })
-        .limit(120),
-      sb
-        .from("daily_metrics")
-        .select("metric_date, resting_hr, hrv_avg, stress_avg, vo2max, vo2max_source, training_readiness")
-        .eq("user_id", user.id)
-        .order("metric_date", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      sb
-        .from("sleep")
-        .select("score, total_s")
-        .eq("user_id", user.id)
-        .order("sleep_date", { ascending: false })
-        .limit(7),
-      sb
-        .from("ai_analyses")
-        .select("content_md, created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      sb
-        .from("chat_messages")
-        .select("role, content")
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: true })
-        .limit(16),
-    ]);
+    const [actsRes, metricsRes, sleepRes, analysisRes, historyRes, notesRes] =
+      await Promise.all([
+        sb
+          .from("activities")
+          .select("activity_type, start_time, distance_m, duration_s, avg_hr, avg_pace_s_per_km")
+          .eq("user_id", user.id)
+          .gte("start_time", since90)
+          .order("start_time", { ascending: false })
+          .limit(120),
+        sb
+          .from("daily_metrics")
+          .select("metric_date, resting_hr, hrv_avg, stress_avg, vo2max, vo2max_source, training_readiness")
+          .eq("user_id", user.id)
+          .order("metric_date", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        sb
+          .from("sleep")
+          .select("score, total_s")
+          .eq("user_id", user.id)
+          .order("sleep_date", { ascending: false })
+          .limit(7),
+        sb
+          .from("ai_analyses")
+          .select("content_md, created_at")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        // BUGFIX : on veut les messages RÉCENTS. descending + reverse() pour les
+        // remettre dans l'ordre chronologique (avant : ascending → on n'envoyait
+        // que les 16 PLUS ANCIENS, donc plus la question courante au-delà de 16).
+        sb
+          .from("chat_messages")
+          .select("role, content")
+          .eq("conversation_id", conversationId)
+          .order("created_at", { ascending: false })
+          .limit(16),
+        sb
+          .from("training_notes")
+          .select("note_date, content")
+          .eq("user_id", user.id)
+          .order("note_date", { ascending: false })
+          .limit(5),
+      ]);
 
     const acts = actsRes.data ?? [];
     // Résumé par sport (90 j).
-    const bySport = new Map<string, { n: number; km: number; paceSum: number; paceN: number; hrSum: number; hrN: number }>();
+    const bySport = new Map<
+      string,
+      { n: number; km: number; paceSum: number; paceN: number; hrSum: number; hrN: number }
+    >();
     for (const a of acts) {
       const key = a.activity_type ?? "autre";
       const e = bySport.get(key) ?? { n: 0, km: 0, paceSum: 0, paceN: 0, hrSum: 0, hrN: 0 };
@@ -136,6 +160,12 @@ export default async (req: Request): Promise<Response> => {
       const pace = a.activity_type?.includes("running") ? ` ${fmtPace(a.avg_pace_s_per_km)}` : "";
       return `- ${d} ${a.activity_type ?? "sport"} ${km} km/${min} min${pace}`;
     });
+
+    const notes = notesRes.data ?? [];
+    const notesText = notes.length
+      ? "\n## Notes de l'athlète\n" +
+        notes.map((n) => `- ${n.note_date} : ${String(n.content).slice(0, 300)}`).join("\n")
+      : "";
 
     // --- Plan d'entraînement actif ---
     let planText = "";
@@ -179,22 +209,26 @@ export default async (req: Request): Promise<Response> => {
         `### Séances des 7 prochains jours\n${lines.length ? lines.join("\n") : "- aucune"}`;
     }
 
-    // --- RAG pgvector (best-effort) ---
+    // --- RAG pgvector (best-effort, nécessite une config d'embeddings) ---
     let ragText = "";
-    try {
-      const queryEmbedding = await embed(cfg.apiKey, message);
-      const { data: chunks } = await sb.rpc("match_rag_chunks", {
-        p_user_id: user.id,
-        query_embedding: queryEmbedding,
-        match_count: 6,
-      });
-      if (Array.isArray(chunks) && chunks.length) {
-        ragText =
-          "\n\n# EXTRAITS PERTINENTS (recherche sémantique)\n" +
-          chunks.map((c: any) => `- ${c.content}`).join("\n");
+    if (cfg.embed) {
+      try {
+        const queryEmbedding = await embed(cfg.embed, message);
+        const { data: chunks } = await sb.rpc("match_rag_chunks", {
+          p_user_id: user.id,
+          query_embedding: queryEmbedding,
+          match_count: 6,
+          p_embed_model: cfg.embed.model,
+        });
+        if (Array.isArray(chunks) && chunks.length) {
+          ragText =
+            "\n\n# EXTRAITS PERTINENTS (recherche sémantique)\n" +
+            chunks.map((c: any) => `- ${c.content}`).join("\n");
+        }
+        recordUsage(sb, user.id, "embed");
+      } catch {
+        // RAG optionnel : on continue sans si indisponible.
       }
-    } catch {
-      // RAG optionnel : on continue sans si indisponible.
     }
 
     const context = [
@@ -211,6 +245,7 @@ export default async (req: Request): Promise<Response> => {
       analysisRes.data?.content_md
         ? `\n## Dernière analyse du coach (extrait)\n${analysisRes.data.content_md.slice(0, 700)}`
         : "",
+      notesText,
       planText,
       ragText,
     ]
@@ -219,75 +254,42 @@ export default async (req: Request): Promise<Response> => {
 
     const system = `${SYSTEM_BASE}\n\n${context}`;
 
-    // Historique -> format Gemini (le dernier message user est déjà inclus).
-    const history = historyRes.data ?? [];
-    const contents: GeminiContent[] = history
+    // Historique récent -> ordre chronologique -> format neutre.
+    const history = (historyRes.data ?? [])
       .filter((msg) => msg.role === "user" || msg.role === "assistant")
-      .map((msg) => ({
-        role: msg.role === "assistant" ? "model" : "user",
-        parts: [{ text: msg.content }],
-      }));
-    if (contents.length === 0) {
-      contents.push({ role: "user", parts: [{ text: message }] });
-    }
+      .reverse();
+    const contents: ChatTurn[] = history.map((msg) => ({
+      role: msg.role === "assistant" ? "assistant" : "user",
+      text: msg.content,
+    }));
+    // La conversation envoyée au modèle DOIT commencer par un tour "user"
+    // (exigé par Claude/Gemini) : on retire d'éventuels tours assistant en tête.
+    while (contents.length && contents[0].role === "assistant") contents.shift();
+    if (contents.length === 0) contents.push({ role: "user", text: message });
 
-    // --- Génération en streaming (SSE Gemini -> flux texte vers le client) ---
-    const upstream = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${cfg.model}:streamGenerateContent?alt=sse`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-goog-api-key": cfg.apiKey },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: system }] },
-          contents,
-          generationConfig: { temperature: 0.7, maxOutputTokens: 3072 },
-        }),
-      },
-    );
-    if (!upstream.ok || !upstream.body) {
-      const t = (await upstream.text().catch(() => "")).slice(0, 200);
-      const msg =
-        upstream.status === 503
-          ? "Modèle Gemini surchargé (503). Réessaie ou change de modèle."
-          : `Gemini ${upstream.status}: ${t}`;
-      return json({ error: msg }, upstream.status === 503 ? 503 : 502);
-    }
+    // --- Génération en streaming (provider -> flux texte vers le client) ---
+    const gen = await llm.stream(system, contents, {
+      temperature: 0.7,
+      maxOutputTokens: 3072,
+      signal: req.signal,
+    });
 
     const convId = conversationId;
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
-        const reader = upstream.body!.getReader();
-        const decoder = new TextDecoder();
         const encoder = new TextEncoder();
-        let buffer = "";
         let full = "";
+        let usage: TokenUsage | null = null;
         try {
-          for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() ?? "";
-            for (const raw of lines) {
-              const line = raw.trim();
-              if (!line.startsWith("data:")) continue;
-              const payload = line.slice(5).trim();
-              if (!payload || payload === "[DONE]") continue;
-              try {
-                const obj = JSON.parse(payload);
-                const txt: string =
-                  obj?.candidates?.[0]?.content?.parts
-                    ?.map((p: any) => p?.text ?? "")
-                    .join("") ?? "";
-                if (txt) {
-                  full += txt;
-                  controller.enqueue(encoder.encode(txt));
-                }
-              } catch {
-                /* fragment SSE partiel : ignoré */
-              }
+          for await (const chunk of gen) {
+            if (chunk.text) {
+              full += chunk.text;
+              controller.enqueue(encoder.encode(chunk.text));
             }
+            if (chunk.usage) usage = chunk.usage;
           }
+        } catch {
+          /* déconnexion client ou coupure upstream : on persiste le partiel */
         } finally {
           if (full) {
             await sb
@@ -303,6 +305,7 @@ export default async (req: Request): Promise<Response> => {
                 () => {},
               );
           }
+          await recordUsage(sb, user.id, "chat", usage);
           controller.close();
         }
       },

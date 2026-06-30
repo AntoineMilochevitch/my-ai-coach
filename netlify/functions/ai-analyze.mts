@@ -8,8 +8,9 @@
  * dans ai_analyses, et la renvoie.
  */
 import { requireUser, HttpError, json } from "./_shared/supabase.ts";
-import { geminiGenerate } from "./_shared/gemini.ts";
+import { getLlm } from "./_shared/llm/index.ts";
 import { loadAiConfig } from "./_shared/ai-config.ts";
+import { checkQuota, recordUsage } from "./_shared/usage.ts";
 
 const SYSTEM = `# RÔLE
 Tu es un coach d'endurance expérimenté (course à pied, vélo, natation, fitness),
@@ -59,7 +60,9 @@ export default async (req: Request): Promise<Response> => {
   if (req.method !== "POST") return json({ error: "POST requis" }, 405);
   try {
     const { user, sb } = await requireUser(req);
-    const cfg = await loadAiConfig(sb, user.id);
+    await checkQuota(sb, user.id, "analyze");
+    const cfg = await loadAiConfig(sb, user);
+    const llm = getLlm(cfg.provider, cfg.apiKey, cfg.model);
     const body = await req.json().catch(() => ({}));
     const days = Math.min(Math.max(Number(body.days) || 30, 7), 120);
     const since = new Date(Date.now() - days * 86400000).toISOString();
@@ -110,10 +113,24 @@ export default async (req: Request): Promise<Response> => {
       JSON.stringify(summary, null, 2) +
       "\n```";
 
-    const content = await geminiGenerate(cfg.apiKey, cfg.model, SYSTEM, userText);
+    // Budget de réflexion borné (Gemini 2.5) pour laisser de la place à la
+    // réponse et éviter une sortie vide/tronquée ; ignoré par les autres providers.
+    const { text: content, usage } = await llm.generate(SYSTEM, userText, {
+      maxOutputTokens: 4096,
+      thinkingBudget: 1024,
+    });
+    await recordUsage(sb, user.id, "analyze", usage);
 
     const period_end = new Date().toISOString().slice(0, 10);
     const period_start = since.slice(0, 10);
+    // Déduplication : une seule analyse par (scope, période).
+    await sb
+      .from("ai_analyses")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("scope", "period")
+      .eq("period_start", period_start)
+      .eq("period_end", period_end);
     await sb.from("ai_analyses").insert({
       user_id: user.id,
       scope: "period",

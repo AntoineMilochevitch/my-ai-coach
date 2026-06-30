@@ -4,6 +4,7 @@
  *  - séance passée sans activité correspondante -> status "missed"
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { dateInTz, todayInTz } from "./dates.ts";
 
 function sportMatch(workoutSport: string, activityType: string | null): boolean {
   if (!activityType) return false;
@@ -22,6 +23,18 @@ export async function matchPlanForUser(
   sb: SupabaseClient,
   userId: string,
 ): Promise<{ matched: number; missed: number }> {
+  // Fuseau de l'athlète : les activités (timestamptz) doivent être rattachées au
+  // bon jour calendaire local, sinon une sortie du soir tombe la veille en UTC.
+  const { data: prof } = await sb
+    .from("profiles")
+    .select("settings")
+    .eq("id", userId)
+    .maybeSingle();
+  const tz =
+    typeof (prof?.settings as any)?.timezone === "string" && (prof?.settings as any).timezone
+      ? (prof!.settings as any).timezone
+      : "Europe/Paris";
+
   const { data: plan } = await sb
     .from("training_plans")
     .select("id, start_date, end_date")
@@ -48,14 +61,14 @@ export async function matchPlanForUser(
   const byDate = new Map<string, { id: string; activity_type: string | null }[]>();
   for (const a of acts ?? []) {
     if (!a.start_time) continue;
-    const d = String(a.start_time).slice(0, 10);
+    const d = dateInTz(new Date(a.start_time), tz);
     (byDate.get(d) ?? byDate.set(d, []).get(d)!).push({
       id: a.id,
       activity_type: a.activity_type,
     });
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayInTz(tz);
   const used = new Set<string>();
   const updates: PromiseLike<unknown>[] = [];
   let matched = 0;

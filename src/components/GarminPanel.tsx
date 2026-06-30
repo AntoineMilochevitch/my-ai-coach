@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { garminLogin, garminMfa, garminSync, indexRag } from "../lib/api";
+import { garminLogin, garminMfa, garminSync, indexRagAll } from "../lib/api";
 
 type Step = "connected" | "form" | "mfa" | "syncing" | "done";
 
@@ -29,8 +29,8 @@ export default function GarminPanel({
       await garminSync();
       onSynced();
       setStep("done");
-      // Indexe les nouvelles activités pour le RAG du chat (best-effort, non bloquant).
-      indexRag().catch(() => {});
+      // Indexe les nouvelles données pour le RAG du chat (best-effort, non bloquant).
+      indexRagAll().catch(() => {});
     } catch (err) {
       setError((err as Error).message);
       setStep(status === "connected" ? "connected" : "form");

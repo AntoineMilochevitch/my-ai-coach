@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import Layout from "../components/Layout";
 import Spinner from "../components/Spinner";
 import CoachAnalysis from "../components/CoachAnalysis";
+import Notes from "../components/Notes";
 import { HrTrendChart, PaceTrendChart, VolumeChart } from "../components/Charts";
 import type { Activity } from "../lib/types";
 import { formatDuration, formatKm, formatPace, weekStart } from "../lib/format";
@@ -169,6 +170,9 @@ export default function Dashboard() {
 
         {/* Coach IA */}
         <CoachAnalysis days={Math.min(range.days, 120)} />
+
+        {/* Notes libres (alimentent le coach IA) */}
+        <Notes />
 
         {/* Graphes */}
         <section className="grid gap-4 lg:grid-cols-2">

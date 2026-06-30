@@ -5,8 +5,9 @@
  * POST { days? }  + Authorization: Bearer <jwt>  -> { content_md }
  */
 import { requireUser, HttpError, json } from "./_shared/supabase.ts";
-import { geminiGenerate } from "./_shared/gemini.ts";
+import { getLlm } from "./_shared/llm/index.ts";
 import { loadAiConfig } from "./_shared/ai-config.ts";
+import { checkQuota, recordUsage } from "./_shared/usage.ts";
 
 const SYSTEM = `# RÔLE
 Tu es un coach sportif et nutrition, data-driven, pédagogue et honnête.
@@ -39,7 +40,9 @@ export default async (req: Request): Promise<Response> => {
   if (req.method !== "POST") return json({ error: "POST requis" }, 405);
   try {
     const { user, sb } = await requireUser(req);
-    const cfg = await loadAiConfig(sb, user.id);
+    await checkQuota(sb, user.id, "nutrition");
+    const cfg = await loadAiConfig(sb, user);
+    const llm = getLlm(cfg.provider, cfg.apiKey, cfg.model);
     const body = await req.json().catch(() => ({}));
     const days = Math.min(Math.max(Number(body.days) || 7, 3), 30);
     const since = new Date(Date.now() - days * 86400000).toISOString();
@@ -88,7 +91,11 @@ export default async (req: Request): Promise<Response> => {
       JSON.stringify(summary, null, 2) +
       "\n```";
 
-    const content = await geminiGenerate(cfg.apiKey, cfg.model, SYSTEM, userText);
+    const { text: content, usage } = await llm.generate(SYSTEM, userText, {
+      maxOutputTokens: 4096,
+      thinkingBudget: 1024,
+    });
+    await recordUsage(sb, user.id, "nutrition", usage);
     return json({ content_md: content });
   } catch (err) {
     if (err instanceof HttpError) return json({ error: err.message }, err.status);

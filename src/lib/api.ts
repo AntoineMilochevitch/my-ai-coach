@@ -71,24 +71,37 @@ export async function chatStream(
   return { conversationId: convId };
 }
 
+export type AiProvider = "gemini" | "anthropic" | "openai";
+
 export const indexRag = () =>
   post<{ indexed: number; remaining: number }>("index-rag", {});
 
-export const setAiConfig = (cfg: {
-  geminiKey?: string;
-  model?: string;
-  provider?: string;
-}) =>
-  post<{ ok: true; model: string | null; provider: string; gemini_key_set: boolean }>(
-    "set-ai-config",
-    cfg,
-  );
+/** Indexe le RAG en boucle jusqu'à épuisement (best-effort, non bloquant). */
+export async function indexRagAll(maxCalls = 25): Promise<void> {
+  for (let i = 0; i < maxCalls; i++) {
+    const res = await indexRag().catch(() => null);
+    if (!res || res.remaining <= 0) return;
+  }
+}
 
-export const listModels = (geminiKey?: string) =>
-  post<{ models: { id: string; label: string }[]; gemini_key_set: boolean }>(
-    "list-models",
-    { geminiKey },
-  );
+export const setAiConfig = (cfg: {
+  provider?: AiProvider;
+  model?: string;
+  apiKey?: string;
+}) =>
+  post<{
+    ok: true;
+    provider: AiProvider;
+    model: string | null;
+    keys: Record<string, boolean>;
+  }>("set-ai-config", cfg);
+
+export const listModels = (provider: AiProvider, apiKey?: string) =>
+  post<{
+    provider: AiProvider;
+    models: { id: string; label: string }[];
+    key_set: boolean;
+  }>("list-models", { provider, apiKey });
 
 export interface PlanInput {
   mode: "weeks" | "date";
