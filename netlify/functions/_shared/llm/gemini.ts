@@ -77,28 +77,39 @@ export function geminiClient(apiKey: string, model: string): LlmClient {
       return r;
     },
     async generateJSON(system, userText, schema, opts = {}) {
-      const base: Record<string, unknown> = {
-        temperature: opts.temperature ?? 0.4,
-        maxOutputTokens: opts.maxOutputTokens ?? 8192,
-        responseMimeType: "application/json",
+      const mk = (maxTok: number, think: boolean) => {
+        const gc: Record<string, unknown> = {
+          temperature: opts.temperature ?? 0.4,
+          maxOutputTokens: maxTok,
+          responseMimeType: "application/json",
+        };
+        if (schema) gc.responseSchema = schema;
+        if (think && opts.thinkingBudget != null)
+          gc.thinkingConfig = { thinkingBudget: opts.thinkingBudget };
+        return {
+          system_instruction: { parts: [{ text: system }] },
+          contents: [{ role: "user", parts: [{ text: userText }] }],
+          generationConfig: gc,
+        };
       };
-      if (schema) base.responseSchema = schema;
-      const mk = (think: boolean) => ({
-        system_instruction: { parts: [{ text: system }] },
-        contents: [{ role: "user", parts: [{ text: userText }] }],
-        generationConfig:
-          think && opts.thinkingBudget != null
-            ? { ...base, thinkingConfig: { thinkingBudget: opts.thinkingBudget } }
-            : base,
-      });
-      let r: GenResult;
-      try {
-        r = await call(mk(true), opts.signal);
-      } catch (e) {
-        // Certains modèles refusent thinkingConfig : on réessaie sans.
-        if (opts.thinkingBudget != null && /thinking/i.test((e as Error).message)) {
-          r = await call(mk(false), opts.signal);
-        } else throw e;
+      const callOnce = async (maxTok: number): Promise<GenResult> => {
+        try {
+          return await call(mk(maxTok, true), opts.signal);
+        } catch (e) {
+          // Certains modèles refusent thinkingConfig : on réessaie sans.
+          if (opts.thinkingBudget != null && /thinking/i.test((e as Error).message)) {
+            return await call(mk(maxTok, false), opts.signal);
+          }
+          throw e;
+        }
+      };
+      let maxTok = opts.maxOutputTokens ?? 8192;
+      let r = await callOnce(maxTok);
+      // Sortie tronquée : on double le budget une fois (souvent la réflexion 2.5
+      // a consommé une grande part du budget) avant d'abandonner.
+      if (r.finishReason === "MAX_TOKENS" && maxTok < 65536) {
+        maxTok = Math.min(maxTok * 2, 65536);
+        r = await callOnce(maxTok);
       }
       if (r.finishReason === "MAX_TOKENS")
         throw new MaxTokensError(`JSON tronqué (${r.text.length} car.)`);

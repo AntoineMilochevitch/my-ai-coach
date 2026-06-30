@@ -89,12 +89,19 @@ export function openaiClient(apiKey: string, model: string): LlmClient {
       return r;
     },
     async generateJSON(system, userText, _schema, opts = {}) {
-      const r = await call(
-        system,
-        [{ role: "user", text: userText }],
-        { temperature: 0.4, maxOutputTokens: opts.maxOutputTokens ?? 8192, ...opts },
-        { response_format: { type: "json_object" } },
-      );
+      const run = (maxTok: number) =>
+        call(
+          system,
+          [{ role: "user", text: userText }],
+          { ...opts, temperature: opts.temperature ?? 0.4, maxOutputTokens: maxTok },
+          { response_format: { type: "json_object" } },
+        );
+      let maxTok = opts.maxOutputTokens ?? 8192;
+      let r = await run(maxTok);
+      if (r.finishReason === "length" && maxTok < 32000) {
+        maxTok = Math.min(maxTok * 2, 32000);
+        r = await run(maxTok);
+      }
       if (r.finishReason === "length")
         throw new MaxTokensError(`JSON tronqué (${r.text.length} car.)`);
       if (!r.text) throw new Error("Réponse JSON OpenAI vide");

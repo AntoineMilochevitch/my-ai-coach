@@ -66,11 +66,18 @@ export function anthropicClient(apiKey: string, model: string): LlmClient {
     async generateJSON(system, userText, _schema, opts = {}) {
       // Claude n'a pas de responseSchema : on contraint via le prompt système.
       const sys = `${system}\n\nRéponds UNIQUEMENT avec un objet JSON valide, sans texte ni barrière markdown autour.`;
-      const r = await call(sys, [{ role: "user", text: userText }], {
-        ...opts,
-        maxOutputTokens: opts.maxOutputTokens ?? 8192,
-        temperature: opts.temperature ?? 0.4,
-      });
+      const run = (maxTok: number) =>
+        call(sys, [{ role: "user", text: userText }], {
+          ...opts,
+          maxOutputTokens: maxTok,
+          temperature: opts.temperature ?? 0.4,
+        });
+      let maxTok = opts.maxOutputTokens ?? 8192;
+      let r = await run(maxTok);
+      if (r.finishReason === "max_tokens" && maxTok < 32000) {
+        maxTok = Math.min(maxTok * 2, 32000);
+        r = await run(maxTok);
+      }
       if (r.finishReason === "max_tokens")
         throw new MaxTokensError(`JSON tronqué (${r.text.length} car.)`);
       if (!r.text) throw new Error("Réponse JSON Claude vide");
