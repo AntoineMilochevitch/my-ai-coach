@@ -39,12 +39,28 @@ export const garminSync = (opts?: { activityDays?: number; dailyDays?: number })
 export const aiAnalyze = (days?: number) =>
   post<{ content_md: string; created_at: string }>("ai-analyze", { days });
 
-/** Chat en streaming : appelle onChunk au fil des tokens. Renvoie l'id de conversation. */
+export type ChatActionKind = "create_plan" | "adapt_plan" | "add_nutrition" | "add_note";
+export interface ChatAction {
+  kind: ChatActionKind;
+  args: Record<string, any>;
+  summary: string;
+  status: "pending" | "applied" | "cancelled";
+}
+export interface ChatProposal {
+  messageId: string | null;
+  content: string;
+  action: ChatAction;
+}
+
+/**
+ * Chat : appelle onChunk au fil des tokens (réponse texte streamée), OU renvoie
+ * une `proposal` si le coach propose une action confirmable (pas de streaming).
+ */
 export async function chatStream(
   message: string,
   conversationId: string | null,
   onChunk: (text: string) => void,
-): Promise<{ conversationId: string }> {
+): Promise<{ conversationId: string; proposal?: ChatProposal }> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
   const res = await fetch("/.netlify/functions/chat", {
@@ -55,6 +71,19 @@ export async function chatStream(
     },
     body: JSON.stringify({ message, conversationId }),
   });
+
+  // Réponse JSON = erreur OU proposition d'action ; sinon flux texte.
+  const ct = res.headers.get("content-type") || "";
+  if (ct.includes("application/json")) {
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error || `Erreur ${res.status}`);
+    return {
+      conversationId: j.conversationId || conversationId || "",
+      proposal: j.action
+        ? { messageId: j.messageId ?? null, content: j.content ?? "", action: j.action }
+        : undefined,
+    };
+  }
   if (!res.ok || !res.body) {
     const j = await res.json().catch(() => ({}));
     throw new Error(j.error || `Erreur ${res.status}`);

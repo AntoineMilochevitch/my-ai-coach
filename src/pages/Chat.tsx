@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import Markdown from "react-markdown";
 import { supabase } from "../lib/supabase";
-import { chatStream, nameConversation } from "../lib/api";
+import { useAuth } from "../lib/auth";
+import { chatStream, nameConversation, generatePlan, adaptPlan, type ChatAction } from "../lib/api";
 import Layout from "../components/Layout";
 import Spinner from "../components/Spinner";
 
@@ -10,7 +12,22 @@ interface Msg {
   created_at?: string;
   role: "user" | "assistant";
   content: string;
+  action?: ChatAction | null;
 }
+
+const ACTION_LABEL: Record<string, string> = {
+  create_plan: "Nouveau plan d'entraînement",
+  adapt_plan: "Adapter le plan à ta forme",
+  add_nutrition: "Ajouter à ton journal nutrition",
+  add_note: "Ajouter une note",
+};
+const ACTION_ICON: Record<string, string> = {
+  create_plan: "calendar-outline",
+  adapt_plan: "sync-outline",
+  add_nutrition: "restaurant-outline",
+  add_note: "document-text-outline",
+};
+const today = () => new Date().toISOString().slice(0, 10);
 interface Conversation {
   id: string;
   title: string | null;
@@ -18,6 +35,7 @@ interface Conversation {
 }
 
 export default function Chat() {
+  const { session } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -40,7 +58,7 @@ export default function Chat() {
   const loadMessages = useCallback(async (convId: string) => {
     const { data } = await supabase
       .from("chat_messages")
-      .select("id, created_at, role, content")
+      .select("id, created_at, role, content, action")
       .eq("conversation_id", convId)
       .order("created_at", { ascending: true });
     setMessages(
@@ -51,6 +69,7 @@ export default function Chat() {
           created_at: m.created_at,
           role: m.role as "user" | "assistant",
           content: m.content,
+          action: (m.action as ChatAction | null) ?? null,
         })),
     );
   }, []);
@@ -144,6 +163,60 @@ export default function Chat() {
       return idx >= 0 ? m.slice(0, idx) : m;
     });
     await doSend(lastUser.content);
+  }
+
+  async function setActionStatus(m: Msg, status: ChatAction["status"]) {
+    if (!m.id || !m.action) return;
+    const next: ChatAction = { ...m.action, status };
+    setMessages((ms) => ms.map((x) => (x.id === m.id ? { ...x, action: next } : x)));
+    await supabase.from("chat_messages").update({ action: next }).eq("id", m.id);
+  }
+
+  // Exécute l'action proposée par le coach (après confirmation de l'athlète).
+  async function confirmAction(m: Msg) {
+    if (!m.action || busy) return;
+    const a = m.action;
+    const uid = session?.user.id;
+    if (!uid) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (a.kind === "create_plan") {
+        await generatePlan(a.args as any);
+      } else if (a.kind === "adapt_plan") {
+        await adaptPlan();
+      } else if (a.kind === "add_nutrition") {
+        const date = (a.args.date as string) || today();
+        const meal = (a.args.meal as string) || "Collation";
+        const items = Array.isArray(a.args.items) ? a.args.items : [];
+        const rows = items.map((it: any) => ({
+          user_id: uid,
+          entry_date: date,
+          meal,
+          label: String(it.label || "Aliment"),
+          calories: it.calories ?? null,
+          protein_g: it.protein_g ?? null,
+          carbs_g: it.carbs_g ?? null,
+          fat_g: it.fat_g ?? null,
+        }));
+        if (rows.length) {
+          const { error: e } = await supabase.from("nutrition_entries").insert(rows);
+          if (e) throw new Error(e.message);
+        }
+      } else if (a.kind === "add_note") {
+        const { error: e } = await supabase.from("training_notes").insert({
+          user_id: uid,
+          note_date: (a.args.date as string) || today(),
+          content: String(a.args.content || a.summary),
+        });
+        if (e) throw new Error(e.message);
+      }
+      await setActionStatus(m, "applied");
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   function newConversation() {
@@ -274,13 +347,56 @@ export default function Chat() {
                     }`}
                   >
                     {m.role === "assistant" ? (
-                      m.content ? (
-                        <div className="markdown">
-                          <Markdown>{m.content}</Markdown>
-                        </div>
-                      ) : (
-                        <Spinner />
-                      )
+                      <>
+                        {m.content ? (
+                          <div className="markdown">
+                            <Markdown>{m.content}</Markdown>
+                          </div>
+                        ) : (
+                          !m.action && <Spinner />
+                        )}
+                        {m.action && (
+                          <div className="mt-2 rounded-xl border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-700 dark:bg-neutral-800/60">
+                            <div className="flex items-center gap-1.5 text-xs font-medium text-neutral-500">
+                              <ion-icon name={ACTION_ICON[m.action.kind] ?? "flash-outline"}></ion-icon>
+                              {ACTION_LABEL[m.action.kind] ?? "Action proposée"}
+                            </div>
+                            <p className="mt-1 whitespace-pre-wrap text-neutral-700 dark:text-neutral-200">
+                              {m.action.summary}
+                            </p>
+                            {m.action.status === "pending" ? (
+                              <div className="mt-2 flex gap-2">
+                                <button
+                                  onClick={() => confirmAction(m)}
+                                  disabled={busy}
+                                  className="rounded-lg bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+                                >
+                                  Confirmer
+                                </button>
+                                <button
+                                  onClick={() => setActionStatus(m, "cancelled")}
+                                  disabled={busy}
+                                  className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs text-neutral-600 disabled:opacity-50 dark:border-neutral-600 dark:text-neutral-300"
+                                >
+                                  Annuler
+                                </button>
+                              </div>
+                            ) : m.action.status === "applied" ? (
+                              <p className="mt-2 inline-flex flex-wrap items-center gap-1 text-xs text-green-600">
+                                <ion-icon name="checkmark-circle-outline"></ion-icon> Appliqué
+                                {(m.action.kind === "create_plan" || m.action.kind === "adapt_plan") && (
+                                  <Link to="/plan" className="underline">— voir le plan</Link>
+                                )}
+                                {m.action.kind === "add_nutrition" && (
+                                  <Link to="/nutrition" className="underline">— voir la nutrition</Link>
+                                )}
+                              </p>
+                            ) : (
+                              <p className="mt-2 text-xs text-neutral-400">Annulé</p>
+                            )}
+                          </div>
+                        )}
+                      </>
                     ) : (
                       m.content
                     )}

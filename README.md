@@ -10,7 +10,7 @@ Conçue multi-utilisateurs dès l'origine (isolation par `user_id` via RLS). Auc
 
 - **Tableau de bord** — agrégats d'activités (volume, allure, FC, VO₂max, records), graphes de tendances (volume, allure, FC), filtres par période et par sport.
 - **Coach IA — analyse de période** — bilan structuré en Markdown (état de forme, points forts, vigilances, recommandations chiffrées) à partir des données récentes.
-- **Chat coach** — conversation contextualisée par les données de l'athlète, le plan actif, les notes et un RAG sémantique (pgvector). Réponses en streaming, historique des conversations, titre généré automatiquement, édition et régénération des messages.
+- **Chat coach** — conversation contextualisée par les données de l'athlète, le plan actif, les notes et un RAG sémantique (pgvector). Réponses en streaming, historique des conversations, titre généré automatiquement, édition et régénération des messages. **Actions confirmables** : le coach peut proposer de créer/adapter un plan, ajouter un repas ou une note, validés par l'athlète depuis la conversation.
 - **Plan d'entraînement adaptatif glissant** — squelette de périodisation (macro) généré une fois, détail des séances matérialisé sur une fenêtre de quelques semaines, ré-adapté à l'état de forme réel (réalisé vs cible, récupération, nutrition, notes)
   manuellement ou automatiquement chaque semaine. Téléversement des séances structurées vers Garmin Connect.
 - **Nutrition** — saisie des repas et conseils IA croisés avec la charge d'entraînement.
@@ -88,7 +88,7 @@ my-ai-coach/
 │   ├── garmin-push-workout.mts # téléversement des séances vers Garmin
 │   ├── scheduled-sync.mts      # cron : sync Garmin horaire
 │   └── scheduled-adapt.mts     # cron : adaptation hebdomadaire des plans
-├── supabase/migrations/        # schéma SQL (0001 → 0009)
+├── supabase/migrations/        # schéma SQL (0001 → 0010)
 ├── netlify.toml                # config de build et redirections SPA
 └── vite.config.ts
 ```
@@ -187,7 +187,7 @@ Scripts disponibles :
 
 ## Base de données
 
-Le schéma est versionné dans `supabase/migrations/` (`0001` → `0009`). Les migrations
+Le schéma est versionné dans `supabase/migrations/` (`0001` → `0010`). Les migrations
 s'appliquent dans l'ordre sur le projet Supabase (SQL Editor ou `supabase db push`).
 Après ajout de colonnes, le cache de schéma PostgREST doit être à jour (rechargement
 automatique, ou « Reload schema » côté Supabase).

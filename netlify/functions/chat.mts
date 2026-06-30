@@ -11,6 +11,7 @@ import { getLlm, type ChatTurn, type TokenUsage } from "./_shared/llm/index.ts";
 import { embed } from "./_shared/embeddings.ts";
 import { loadAiConfig } from "./_shared/ai-config.ts";
 import { checkQuota, recordUsage } from "./_shared/usage.ts";
+import { mightBeAction, detectAction } from "./_shared/chat-actions.ts";
 
 const MAX_MESSAGE_CHARS = 4000;
 
@@ -76,6 +77,41 @@ export default async (req: Request): Promise<Response> => {
       .select("id")
       .single();
     const userMsgId = userMsg?.id;
+
+    // --- Détection d'action (proposition confirmable) ---
+    // Si le message demande explicitement une action (créer/adapter un plan,
+    // ajouter nutrition/note), on répond par une PROPOSITION (carte à confirmer)
+    // au lieu d'une réponse en streaming.
+    if (mightBeAction(message)) {
+      const { action, usage } = await detectAction(llm, message);
+      if (action) {
+        const payload = {
+          kind: action.kind,
+          args: action.args,
+          summary: action.summary,
+          status: "pending" as const,
+        };
+        const { data: am } = await sb
+          .from("chat_messages")
+          .insert({
+            conversation_id: conversationId,
+            user_id: user.id,
+            role: "assistant",
+            content: action.assistant,
+            action: payload,
+          })
+          .select("id")
+          .single();
+        await recordUsage(sb, user.id, "chat", usage);
+        return json({
+          type: "proposal",
+          conversationId,
+          messageId: am?.id ?? null,
+          content: action.assistant,
+          action: payload,
+        });
+      }
+    }
 
     // --- Contexte athlète (scopé au user) ---
     const since90 = new Date(Date.now() - 90 * 86400000).toISOString();
