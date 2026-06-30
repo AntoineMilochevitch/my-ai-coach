@@ -35,7 +35,13 @@ export default async (req: Request): Promise<Response> => {
     .maybeSingle();
   const priorPlanId = prior?.id ?? null;
 
-  await sb.from("training_plans").delete().eq("user_id", user.id).eq("status", "generating");
+  // Nettoie les générations bloquées/ratées (ne pas laisser une erreur s'afficher
+  // indéfiniment sur la page Plan), puis archive le plan actif courant.
+  await sb
+    .from("training_plans")
+    .delete()
+    .eq("user_id", user.id)
+    .in("status", ["generating", "error"]);
   await sb
     .from("training_plans")
     .update({ status: "archived" })
