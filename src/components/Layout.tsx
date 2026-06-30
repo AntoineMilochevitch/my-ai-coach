@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import HeaderActions from "./HeaderActions";
+import Logo from "./Logo";
 
 const STATUS_COLOR: Record<string, string> = {
   connected: "bg-green-500",
@@ -27,11 +28,11 @@ export default function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-neutral-50 dark:bg-neutral-950">
       <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-neutral-200 bg-white/90 px-4 py-3 backdrop-blur sm:px-6 dark:border-neutral-800 dark:bg-neutral-900/90">
-        <Link
-          to="/"
-          className="text-lg font-semibold text-neutral-900 dark:text-neutral-100"
-        >
-          my-ai-coach
+        <Link to="/" className="flex items-center gap-2">
+          <Logo className="h-7 w-7" />
+          <span className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
+            my-ai-coach
+          </span>
         </Link>
         <HeaderActions
           dot={dot}

@@ -135,5 +135,14 @@ export const pushWorkout = (opts: { planWorkoutId?: string; all?: boolean }) =>
 export const nutritionAdvice = (days?: number) =>
   post<{ content_md: string }>("nutrition-advice", { days });
 
+export const estimateNutrition = (description: string) =>
+  post<{
+    label: string;
+    calories: number;
+    protein_g: number;
+    carbs_g: number;
+    fat_g: number;
+  }>("estimate-nutrition", { description });
+
 export const nameConversation = (conversationId: string) =>
   post<{ title: string }>("name-conversation", { conversationId });

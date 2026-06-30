@@ -8,7 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { HttpError } from "./supabase.ts";
 import type { TokenUsage } from "./llm/index.ts";
 
-export type UsageKind = "chat" | "analyze" | "nutrition" | "plan" | "embed";
+export type UsageKind = "chat" | "analyze" | "nutrition" | "plan" | "embed" | "estimate";
 
 const LIMITS: Record<UsageKind, number> = {
   chat: 200,
@@ -16,6 +16,7 @@ const LIMITS: Record<UsageKind, number> = {
   nutrition: 30,
   plan: 12,
   embed: 5000,
+  estimate: 150,
 };
 
 /** Jour UTC (cohérent avec le défaut de la colonne ai_usage.day). */
