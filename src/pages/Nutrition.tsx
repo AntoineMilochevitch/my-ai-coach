@@ -4,7 +4,7 @@ import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import Layout from "../components/Layout";
 import Spinner from "../components/Spinner";
-import { nutritionAdvice } from "../lib/api";
+import { nutritionAdvice, estimateNutrition } from "../lib/api";
 
 interface Entry {
   id: string;
@@ -37,6 +37,7 @@ export default function Nutrition() {
   const [carbs, setCarbs] = useState("");
   const [fat, setFat] = useState("");
   const [saving, setSaving] = useState(false);
+  const [estimating, setEstimating] = useState(false);
 
   // Conseils IA
   const [advice, setAdvice] = useState<string | null>(null);
@@ -89,6 +90,27 @@ export default function Nutrition() {
   async function remove(id: string) {
     setEntries((es) => es.filter((x) => x.id !== id));
     await supabase.from("nutrition_entries").delete().eq("id", id);
+  }
+
+  // Estime calories/macros à partir de la description du repas (IA), puis
+  // pré-remplit les champs (l'utilisateur peut corriger avant d'ajouter).
+  async function estimate() {
+    const desc = label.trim();
+    if (!desc || estimating) return;
+    setEstimating(true);
+    setError(null);
+    try {
+      const r = await estimateNutrition(desc);
+      if (r.label) setLabel(r.label);
+      setCalories(String(r.calories));
+      setProtein(String(r.protein_g));
+      setCarbs(String(r.carbs_g));
+      setFat(String(r.fat_g));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setEstimating(false);
+    }
   }
 
   async function getAdvice() {
@@ -168,8 +190,20 @@ export default function Nutrition() {
               </select>
             </div>
             <div className="sm:col-span-4">
-              <label className="text-sm font-medium">Aliment *</label>
-              <input required placeholder="ex. Riz complet + poulet" value={label} onChange={(e) => setLabel(e.target.value)} className={inputCls} />
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-sm font-medium">Aliment *</label>
+                <button
+                  type="button"
+                  onClick={estimate}
+                  disabled={estimating || !label.trim()}
+                  className="inline-flex items-center gap-1 text-xs text-neutral-600 transition hover:text-neutral-900 disabled:opacity-40 dark:text-neutral-300 dark:hover:text-neutral-100"
+                  title="Estimer calories et macros à partir de la description"
+                >
+                  {estimating ? <Spinner /> : <ion-icon name="sparkles-outline"></ion-icon>}
+                  Estimer les valeurs (IA)
+                </button>
+              </div>
+              <input required placeholder="ex. Riz complet + poulet, 2 œufs…" value={label} onChange={(e) => setLabel(e.target.value)} className={inputCls} />
             </div>
             <div>
               <label className="text-sm font-medium">kcal</label>

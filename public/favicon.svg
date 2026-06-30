@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="my-ai-coach">
+  <rect width="32" height="32" rx="8" fill="#0a0a0a"/>
+  <path d="M4 18 H12 L14 10 L17 23 L19 16 L21 18 H28" fill="none" stroke="#22c55e"
+        stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="24.5" cy="8.5" r="1.7" fill="#ffffff"/>
+</svg>
