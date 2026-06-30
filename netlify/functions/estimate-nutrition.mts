@@ -53,6 +53,7 @@ export default async (req: Request): Promise<Response> => {
       temperature: 0.2,
       maxOutputTokens: 1024,
       thinkingBudget: 0,
+      timeoutMs: 8000,
     });
     await recordUsage(sb, user.id, "estimate", usage);
 

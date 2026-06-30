@@ -46,7 +46,7 @@ export async function generateWorkoutSteps(
     SYSTEM,
     `Séance de course :\n${lines.join("\n")}`,
     SCHEMA,
-    { temperature: 0.3, maxOutputTokens: 4096, thinkingBudget: 512 },
+    { temperature: 0.3, maxOutputTokens: 4096, thinkingBudget: 512, timeoutMs: 9000 },
   );
   return { steps: sanitizeSteps(data.steps), usage };
 }

@@ -4,7 +4,7 @@
  * indisponible (403/404), on bascule vers le modèle suivant de la liste de repli
  * du même provider. Transparent pour tous les appelants.
  */
-import type { LlmClient, Provider } from "./types.ts";
+import type { LlmClient, Provider, GenerateOpts } from "./types.ts";
 import { geminiClient } from "./gemini.ts";
 import { anthropicClient } from "./anthropic.ts";
 import { openaiClient } from "./openai.ts";
@@ -47,11 +47,24 @@ export function getLlm(provider: Provider, apiKey: string, model: string): LlmCl
   const ordered = [model, ...(FALLBACKS[provider] ?? []).filter((m) => m !== model)];
   const clients = ordered.map((m) => makeRaw(provider, apiKey, m));
 
-  async function run<T>(fn: (c: LlmClient) => Promise<T>): Promise<T> {
+  // opts.timeoutMs = budget de temps TOTAL (réparti entre les essais de repli) :
+  // chaque essai reçoit le temps restant, et on s'arrête si le budget est épuisé.
+  async function run<T>(
+    opts: GenerateOpts | undefined,
+    fn: (c: LlmClient, o: GenerateOpts | undefined) => Promise<T>,
+  ): Promise<T> {
+    const total = opts?.timeoutMs;
+    const start = Date.now();
     let lastErr: unknown;
     for (let i = 0; i < clients.length; i++) {
+      let o = opts;
+      if (total) {
+        const remaining = total - (Date.now() - start);
+        if (i > 0 && remaining < 800) break; // budget épuisé
+        o = { ...opts, timeoutMs: Math.max(remaining, 800) };
+      }
       try {
-        return await fn(clients[i]);
+        return await fn(clients[i], o);
       } catch (e) {
         lastErr = e;
         if (shouldFallback(e) && i < clients.length - 1) continue; // modèle suivant
@@ -64,8 +77,8 @@ export function getLlm(provider: Provider, apiKey: string, model: string): LlmCl
   return {
     provider,
     model,
-    generate: (s, u, o) => run((c) => c.generate(s, u, o)),
-    generateJSON: (s, u, sc, o) => run((c) => c.generateJSON(s, u, sc, o)),
-    stream: (s, t, o) => run((c) => c.stream(s, t, o)),
+    generate: (s, u, o) => run(o, (c, oo) => c.generate(s, u, oo)),
+    generateJSON: (s, u, sc, o) => run(o, (c, oo) => c.generateJSON(s, u, sc, oo)),
+    stream: (s, t, o) => run(o, (c, oo) => c.stream(s, t, oo)),
   };
 }

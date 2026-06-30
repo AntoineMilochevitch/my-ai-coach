@@ -94,6 +94,7 @@ export default async (req: Request): Promise<Response> => {
     const { text: content, usage } = await llm.generate(SYSTEM, userText, {
       maxOutputTokens: 4096,
       thinkingBudget: 1024,
+      timeoutMs: 9000,
     });
     await recordUsage(sb, user.id, "nutrition", usage);
     return json({ content_md: content });

@@ -2,13 +2,17 @@
 import {
   type LlmClient,
   type GenResult,
+  type GenerateOpts,
   type StreamChunk,
   type TokenUsage,
   MaxTokensError,
   fetchRetry,
   sseLines,
   extractJson,
+  timeoutController,
 } from "./types.ts";
+
+const DEFAULT_TIMEOUT = 60000;
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -22,29 +26,31 @@ function usageOf(meta: any): TokenUsage {
 export function geminiClient(apiKey: string, model: string): LlmClient {
   const headers = { "content-type": "application/json", "x-goog-api-key": apiKey };
 
-  async function call(
-    payload: Record<string, unknown>,
-    signal?: AbortSignal,
-  ): Promise<GenResult> {
-    const resp = await fetchRetry(`${BASE}/${model}:generateContent`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload),
-      signal,
-    });
-    if (!resp.ok) {
-      const t = (await resp.text()).slice(0, 300);
-      if (resp.status === 503)
-        throw new Error(
-          "Le modèle Gemini est temporairement surchargé (503). Réessaie ou choisis un autre modèle.",
-        );
-      throw new Error(`Gemini ${resp.status}: ${t}`);
+  async function call(payload: Record<string, unknown>, opts: GenerateOpts): Promise<GenResult> {
+    const tc = timeoutController(opts.signal, opts.timeoutMs ?? DEFAULT_TIMEOUT);
+    try {
+      const resp = await fetchRetry(`${BASE}/${model}:generateContent`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+        signal: tc.signal,
+      });
+      if (!resp.ok) {
+        const t = (await resp.text()).slice(0, 300);
+        if (resp.status === 503)
+          throw new Error(
+            "Le modèle Gemini est temporairement surchargé (503). Réessaie ou choisis un autre modèle.",
+          );
+        throw new Error(`Gemini ${resp.status}: ${t}`);
+      }
+      const body: any = await resp.json();
+      const cand = body?.candidates?.[0];
+      const text: string =
+        cand?.content?.parts?.map((p: any) => p?.text ?? "").join("") ?? "";
+      return { text, usage: usageOf(body?.usageMetadata), finishReason: cand?.finishReason };
+    } finally {
+      tc.clear();
     }
-    const body: any = await resp.json();
-    const cand = body?.candidates?.[0];
-    const text: string =
-      cand?.content?.parts?.map((p: any) => p?.text ?? "").join("") ?? "";
-    return { text, usage: usageOf(body?.usageMetadata), finishReason: cand?.finishReason };
   }
 
   return {
@@ -65,11 +71,11 @@ export function geminiClient(apiKey: string, model: string): LlmClient {
       });
       let r: GenResult;
       try {
-        r = await call(mk(true), opts.signal);
+        r = await call(mk(true), opts);
       } catch (e) {
         // Certains modèles refusent thinkingConfig (ex. budget 0 sur 2.5-pro).
         if (opts.thinkingBudget != null && /thinking/i.test((e as Error).message)) {
-          r = await call(mk(false), opts.signal);
+          r = await call(mk(false), opts);
         } else throw e;
       }
       if (!r.text)
@@ -94,11 +100,11 @@ export function geminiClient(apiKey: string, model: string): LlmClient {
       };
       const callOnce = async (maxTok: number): Promise<GenResult> => {
         try {
-          return await call(mk(maxTok, true), opts.signal);
+          return await call(mk(maxTok, true), opts);
         } catch (e) {
           // Certains modèles refusent thinkingConfig : on réessaie sans.
           if (opts.thinkingBudget != null && /thinking/i.test((e as Error).message)) {
-            return await call(mk(maxTok, false), opts.signal);
+            return await call(mk(maxTok, false), opts);
           }
           throw e;
         }
@@ -118,22 +124,32 @@ export function geminiClient(apiKey: string, model: string): LlmClient {
       return { data: extractJson(r.text), usage: r.usage };
     },
     async stream(system, turns, opts = {}) {
-      const resp = await fetch(`${BASE}/${model}:streamGenerateContent?alt=sse`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: system }] },
-          contents: turns.map((t) => ({
-            role: t.role === "assistant" ? "model" : "user",
-            parts: [{ text: t.text }],
-          })),
-          generationConfig: {
-            temperature: opts.temperature ?? 0.7,
-            maxOutputTokens: opts.maxOutputTokens ?? 3072,
-          },
-        }),
-        signal: opts.signal,
-      });
+      // Timeout sur l'ÉTABLISSEMENT de la connexion (anti-blocage), libéré dès que
+      // la réponse arrive pour laisser le corps streamer librement.
+      const tc = timeoutController(opts.signal, opts.timeoutMs ?? 30000);
+      let resp: Response;
+      try {
+        resp = await fetch(`${BASE}/${model}:streamGenerateContent?alt=sse`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: system }] },
+            contents: turns.map((t) => ({
+              role: t.role === "assistant" ? "model" : "user",
+              parts: [{ text: t.text }],
+            })),
+            generationConfig: {
+              temperature: opts.temperature ?? 0.7,
+              maxOutputTokens: opts.maxOutputTokens ?? 3072,
+            },
+          }),
+          signal: tc.signal,
+        });
+      } catch (e) {
+        tc.clear();
+        throw e;
+      }
+      tc.clear();
       if (!resp.ok || !resp.body) {
         const t = (await resp.text().catch(() => "")).slice(0, 200);
         throw new Error(

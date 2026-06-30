@@ -315,6 +315,7 @@ export default async (req: Request): Promise<Response> => {
         temperature: 0.7,
         maxOutputTokens: 3072,
         signal: req.signal,
+        timeoutMs: 8000, // borne l'établissement de la connexion (anti-504)
       });
     } catch (e) {
       // Échec avant tout token : on retire le message user pour ne pas le laisser

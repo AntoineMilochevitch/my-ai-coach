@@ -137,6 +137,7 @@ export async function detectAction(
       temperature: 0.1,
       maxOutputTokens: 1024,
       thinkingBudget: 0,
+      timeoutMs: 7000, // borné : reste sous le timeout Netlify (chemin synchrone)
     });
     const kind = data.action as ActionKind;
     if (!VALID.includes(kind)) return { action: null, usage };

@@ -28,6 +28,7 @@ export interface GenerateOpts {
   maxOutputTokens?: number;
   thinkingBudget?: number; // Gemini 2.5 uniquement
   signal?: AbortSignal;
+  timeoutMs?: number; // borne le temps d'attente d'une réponse (anti-blocage / 504)
 }
 
 export interface StreamChunk {
@@ -60,6 +61,26 @@ export class MaxTokensError extends Error {
 }
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Combine un éventuel signal d'annulation client avec un timeout. `clear()` annule
+ * le minuteur sans annuler le lien au signal client — utile pour le streaming :
+ * on borne le temps d'ÉTABLISSEMENT de la connexion, puis on libère le minuteur
+ * tout en gardant l'annulation possible si le client se déconnecte.
+ */
+export function timeoutController(
+  signal: AbortSignal | undefined,
+  ms: number | undefined,
+): { signal: AbortSignal | undefined; clear: () => void } {
+  if (!ms || ms <= 0) return { signal, clear: () => {} };
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(new Error(`Délai d'attente dépassé (${ms} ms)`)), ms);
+  if (signal) {
+    if (signal.aborted) ctrl.abort();
+    else signal.addEventListener("abort", () => ctrl.abort(), { once: true });
+  }
+  return { signal: ctrl.signal, clear: () => clearTimeout(timer) };
+}
 // On NE retente PAS le 429 (limite de débit) : on bascule plutôt vite vers un
 // autre modèle (voir getLlm + repli). Seules les erreurs vraiment transitoires
 // (surcharge serveur) sont retentées.
