@@ -2,14 +2,25 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { supabase } from "../lib/supabase";
 import Layout from "../components/Layout";
 import Spinner from "../components/Spinner";
-import { generatePlan, matchPlan, pushWorkout, type PlanInput } from "../lib/api";
+import { generatePlan, adaptPlan, matchPlan, pushWorkout, type PlanInput } from "../lib/api";
 
+interface MacroWeek {
+  num: number;
+  phase?: string;
+  focus?: string;
+  volume_km?: number;
+  sortie_longue_km?: number;
+  seances_qualite?: number;
+  note?: string;
+}
 interface Plan {
   id: string;
   goal: string | null;
   start_date: string;
   end_date: string;
   availability: Record<string, any> | null;
+  macro: { resume?: string; semaines?: MacroWeek[] } | null;
+  last_adapted_at: string | null;
 }
 interface Step {
   kind?: string;
@@ -89,6 +100,27 @@ function StepsList({ steps }: { steps: Step[] }) {
   );
 }
 
+/** Semaine en cours du plan (1..numWeeks) d'après start_date (heure locale). */
+function planCurrentWeek(startDate: string, numWeeks: number): number {
+  const start = new Date(`${startDate}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diff = Math.floor((today.getTime() - start.getTime()) / (7 * 86400000));
+  return Math.min(Math.max(diff + 1, 1), Math.max(numWeeks, 1));
+}
+
+const PHASE_COLOR: Record<string, string> = {
+  base: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
+  développement: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  developpement: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  spécifique: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+  specifique: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+  affûtage: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
+  affutage: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
+  récupération: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+  recuperation: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+};
+
 const RUN_TYPES = ["easy", "long", "tempo", "interval", "recovery"];
 /** Séance "course" (donc téléversable vers Garmin) : sport course/running OU type de séance de course. */
 function isRunSession(w: { sport: string | null; session_type: string | null }): boolean {
@@ -123,6 +155,7 @@ export default function Plan() {
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [adapting, setAdapting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const pollingRef = useRef(false);
@@ -208,7 +241,7 @@ export default function Plan() {
     setError(null);
     const { data: p } = await supabase
       .from("training_plans")
-      .select("id, goal, start_date, end_date, status, availability, content")
+      .select("id, goal, start_date, end_date, status, availability, content, macro, last_adapted_at")
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -290,22 +323,44 @@ export default function Plan() {
     await startGeneration(buildInput());
   }
 
-  // Adapter = régénérer à partir des paramètres enregistrés (le coach tient compte du réalisé).
-  async function adaptPlan() {
-    const av = plan?.availability ?? {};
-    await startGeneration({
-      mode: av.mode === "date" ? "date" : "weeks",
-      objective: av.objective || "Forme générale",
-      targetTime: av.targetTime || undefined,
-      distanceKm: av.distanceKm ?? undefined,
-      elevationM: av.elevationM ?? undefined,
-      targetDate: av.targetDate || undefined,
-      weeks: av.weeks || undefined,
-      preferredDays: av.preferredDays || undefined,
-      maxSessionMin: av.maxSessionMin ?? undefined,
-      level: av.level || undefined,
-      constraints: av.constraints || undefined,
-    });
+  // Adapter = ré-ajuster la fenêtre de semaines à venir selon l'état de forme réel
+  // (réalisé vs cible, récup, nutrition, notes). Ne régénère PAS tout le plan.
+  async function onAdapt() {
+    if (!plan || adapting) return;
+    setAdapting(true);
+    setError(null);
+    setInfo(null);
+    const baseline = plan.last_adapted_at ?? null;
+    try {
+      await adaptPlan();
+      const started = Date.now();
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 2500));
+        const { data: p } = await supabase
+          .from("training_plans")
+          .select("last_adapted_at, content")
+          .eq("id", plan.id)
+          .maybeSingle();
+        const adaptError = (p?.content as { adapt_error?: string } | null)?.adapt_error;
+        if (p?.last_adapted_at && p.last_adapted_at !== baseline) {
+          setInfo("Plan adapté à ta forme récente.");
+          await load();
+          break;
+        }
+        if (adaptError) {
+          setError(adaptError);
+          break;
+        }
+        if (Date.now() - started > 120000) {
+          setError("L'adaptation prend trop de temps. Réessaie dans un moment.");
+          break;
+        }
+      }
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setAdapting(false);
+    }
   }
 
   async function deletePlan() {
@@ -350,6 +405,12 @@ export default function Plan() {
     (acc[k] ??= []).push(w);
     return acc;
   }, {});
+  const macroWeeks = plan?.macro?.semaines ?? [];
+  const currentWeek = plan ? planCurrentWeek(plan.start_date, macroWeeks.length) : 0;
+  const macroByNum = new Map(macroWeeks.map((w) => [w.num, w]));
+  const weekNums = macroWeeks.length
+    ? macroWeeks.map((w) => w.num)
+    : Object.keys(byWeek).map(Number).sort((a, b) => a - b);
 
   const inputCls =
     "mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100";
@@ -367,13 +428,21 @@ export default function Plan() {
           </h1>
           {plan && !showForm && !generating && (
             <div className="flex flex-wrap gap-2">
-              <button onClick={adaptPlan} className={ghostBtn}>
-                <ion-icon name="sync-outline" className="align-[-2px]"></ion-icon> Adapter
+              <button onClick={onAdapt} disabled={adapting} className={ghostBtn}>
+                {adapting ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Spinner /> Adaptation…
+                  </span>
+                ) : (
+                  <>
+                    <ion-icon name="sync-outline" className="align-[-2px]"></ion-icon> Adapter ma semaine
+                  </>
+                )}
               </button>
-              <button onClick={() => setShowForm(true)} className={ghostBtn}>
+              <button onClick={() => setShowForm(true)} disabled={adapting} className={ghostBtn}>
                 Nouveau plan
               </button>
-              <button onClick={deletePlan} className={`${ghostBtn} text-red-600`}>
+              <button onClick={deletePlan} disabled={adapting} className={`${ghostBtn} text-red-600`}>
                 Supprimer
               </button>
             </div>
@@ -534,16 +603,59 @@ export default function Plan() {
               <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
                 <div className="h-full bg-green-500" style={{ width: total ? `${(done / total) * 100}%` : "0%" }} />
               </div>
-              <p className="mt-1 text-xs text-neutral-500">{done}/{total} séances réalisées</p>
+              <p className="mt-1 text-xs text-neutral-500">
+                {done}/{total} séances planifiées réalisées
+                {macroWeeks.length ? ` · semaine ${currentWeek}/${macroWeeks.length}` : ""}
+              </p>
+              <p className="mt-2 flex items-start gap-1.5 text-xs text-neutral-500">
+                <ion-icon name="sparkles-outline" className="mt-0.5 shrink-0"></ion-icon>
+                <span>
+                  Plan adaptatif : les semaines à venir se détaillent au fil de ta progression
+                  (auto chaque lundi, ou via « Adapter ma semaine ») selon ta forme et ton réalisé.
+                  {plan.last_adapted_at &&
+                    ` Dernière adaptation : ${new Date(plan.last_adapted_at).toLocaleDateString("fr-FR")}.`}
+                </span>
+              </p>
             </section>
 
-            {Object.keys(byWeek)
-              .map(Number)
-              .sort((a, b) => a - b)
-              .map((wk) => (
+            {weekNums.map((wk) => {
+              const mw = macroByNum.get(wk);
+              const sessions = byWeek[wk] ?? [];
+              return (
                 <section key={wk} className="space-y-2">
-                  <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">Semaine {wk}</h3>
-                  {byWeek[wk].map((w) => (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">
+                      Semaine {wk}
+                    </h3>
+                    {wk === currentWeek && (
+                      <span className="rounded-full bg-neutral-900 px-2 py-0.5 text-[10px] font-medium text-white dark:bg-neutral-100 dark:text-neutral-900">
+                        en cours
+                      </span>
+                    )}
+                    {mw?.phase && (
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          PHASE_COLOR[mw.phase.toLowerCase()] ??
+                          "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
+                        }`}
+                      >
+                        {mw.phase}
+                      </span>
+                    )}
+                    {(mw?.volume_km != null || mw?.seances_qualite != null) && (
+                      <span className="text-xs text-neutral-500">
+                        {mw?.volume_km != null ? `~${mw.volume_km} km` : ""}
+                        {mw?.seances_qualite != null ? ` · ${mw.seances_qualite} qualité` : ""}
+                      </span>
+                    )}
+                  </div>
+                  {mw?.focus && <p className="text-xs text-neutral-500">{mw.focus}</p>}
+                  {sessions.length === 0 && (
+                    <p className="rounded-xl border border-dashed border-neutral-300 p-3 text-xs text-neutral-500 dark:border-neutral-700">
+                      Séances détaillées plus tard, adaptées à ta forme (auto chaque lundi ou « Adapter ma semaine »).
+                    </p>
+                  )}
+                  {sessions.map((w) => (
                     <div key={w.id} className="flex items-start gap-3 rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
                       <input type="checkbox" checked={w.status === "done"} onChange={() => toggleDone(w)} className="mt-1 h-4 w-4" />
                       <div className="min-w-0 flex-1">
@@ -593,7 +705,8 @@ export default function Plan() {
                     </div>
                   ))}
                 </section>
-              ))}
+              );
+            })}
           </>
         )}
       </main>

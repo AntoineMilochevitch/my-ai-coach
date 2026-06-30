@@ -8,7 +8,7 @@
  * Repli sur la clé d'environnement du serveur UNIQUEMENT pour les comptes
  * propriétaires listés dans OWNER_EMAILS (sinon chacun paie sa propre clé).
  */
-import type { SupabaseClient, User } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { decrypt } from "./crypto.ts";
 import { HttpError } from "./supabase.ts";
 import type { Provider } from "./llm/index.ts";
@@ -20,6 +20,12 @@ export interface AiConfig {
   model: string;
   embed: EmbedConfig | null;
   timezone: string;
+}
+
+/** Identité minimale requise (compatible avec l'objet User de Supabase). */
+export interface UserLike {
+  id: string;
+  email?: string | null;
 }
 
 const PROVIDERS: Provider[] = ["gemini", "anthropic", "openai"];
@@ -42,7 +48,7 @@ export function colForProvider(p: Provider): string {
       : "gemini_key_enc";
 }
 
-export async function loadAiConfig(sb: SupabaseClient, user: User): Promise<AiConfig> {
+export async function loadAiConfig(sb: SupabaseClient, user: UserLike): Promise<AiConfig> {
   const { data: prof } = await sb
     .from("profiles")
     .select("settings")

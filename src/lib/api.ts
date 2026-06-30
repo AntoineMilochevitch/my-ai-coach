@@ -125,6 +125,10 @@ export const generatePlan = (input: PlanInput) =>
 
 export const matchPlan = () => post<{ matched: number; missed: number }>("match-plan", {});
 
+// Adaptation roulante du plan actif (background, 202 immédiat). Le client suit
+// l'avancement via training_plans.last_adapted_at.
+export const adaptPlan = () => post<Record<string, never>>("adapt-plan-background", {});
+
 export const pushWorkout = (opts: { planWorkoutId?: string; all?: boolean }) =>
   post<{ pushed: number; errors: string[] }>("garmin-push-workout", opts);
 
