@@ -39,7 +39,13 @@ export const garminSync = (opts?: { activityDays?: number; dailyDays?: number })
 export const aiAnalyze = (days?: number) =>
   post<{ content_md: string; created_at: string }>("ai-analyze", { days });
 
-export type ChatActionKind = "create_plan" | "adapt_plan" | "add_nutrition" | "add_note";
+export type ChatActionKind =
+  | "create_plan"
+  | "adapt_plan"
+  | "add_nutrition"
+  | "add_note"
+  | "create_workout"
+  | "edit_workout";
 export interface ChatAction {
   kind: ChatActionKind;
   args: Record<string, any>;
@@ -160,6 +166,16 @@ export const adaptPlan = () => post<Record<string, never>>("adapt-plan-backgroun
 
 export const pushWorkout = (opts: { planWorkoutId?: string; all?: boolean }) =>
   post<{ pushed: number; errors: string[] }>("garmin-push-workout", opts);
+
+// Crée une séance (étapes générées par IA) et l'envoie sur la montre Garmin.
+export const createWorkout = (spec: Record<string, any>) =>
+  post<{ pushed: number; garminWorkoutId: number; scheduled_date: string }>("create-workout", {
+    spec,
+  });
+
+// Modifie une séance existante du plan (par date).
+export const editWorkout = (date: string, changes: Record<string, any>) =>
+  post<{ updated: number }>("edit-workout", { date, changes });
 
 export const nutritionAdvice = (days?: number) =>
   post<{ content_md: string }>("nutrition-advice", { days });

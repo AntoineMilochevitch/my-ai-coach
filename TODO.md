@@ -8,7 +8,7 @@
 
 - [ ] **Onglet Planning** — vue calendrier dédiée des séances (semaine / mois), distincte de la liste du plan.
 
-- [ ] **Création d'activité depuis le chat** - le coach peut créer des activités depuis le chat, qu'on peut directement envoyé à la montre
+- [x] **Création d'activité depuis le chat** - le coach peut créer des activités depuis le chat, qu'on peut directement envoyé à la montre. *(Fait : action `create_workout` → étapes générées par IA + envoi Garmin ; et `edit_workout` pour modifier une séance précise du plan. Endpoints `create-workout` / `edit-workout`.)*
 
 - [x] **logo** - Faire un prompt pour générer un logo pour le site et le mettre dans le site et en favicon. *(Fait : logo SVG `src/components/Logo.tsx` dans l'en-tête + `public/favicon.svg`. Prompt de génération fourni si remplacement par un logo IA souhaité.)*
 

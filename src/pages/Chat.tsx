@@ -3,7 +3,15 @@ import { Link } from "react-router-dom";
 import Markdown from "react-markdown";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
-import { chatStream, nameConversation, generatePlan, adaptPlan, type ChatAction } from "../lib/api";
+import {
+  chatStream,
+  nameConversation,
+  generatePlan,
+  adaptPlan,
+  createWorkout,
+  editWorkout,
+  type ChatAction,
+} from "../lib/api";
 import Layout from "../components/Layout";
 import Spinner from "../components/Spinner";
 
@@ -20,12 +28,16 @@ const ACTION_LABEL: Record<string, string> = {
   adapt_plan: "Adapter le plan à ta forme",
   add_nutrition: "Ajouter à ton journal nutrition",
   add_note: "Ajouter une note",
+  create_workout: "Créer et envoyer une séance sur Garmin",
+  edit_workout: "Modifier une séance du plan",
 };
 const ACTION_ICON: Record<string, string> = {
   create_plan: "calendar-outline",
   adapt_plan: "sync-outline",
   add_nutrition: "restaurant-outline",
   add_note: "document-text-outline",
+  create_workout: "watch-outline",
+  edit_workout: "create-outline",
 };
 const today = () => new Date().toISOString().slice(0, 10);
 interface Conversation {
@@ -210,6 +222,10 @@ export default function Chat() {
           content: String(a.args.content || a.summary),
         });
         if (e) throw new Error(e.message);
+      } else if (a.kind === "create_workout") {
+        await createWorkout(a.args);
+      } else if (a.kind === "edit_workout") {
+        await editWorkout(String(a.args.date || ""), a.args);
       }
       await setActionStatus(m, "applied");
     } catch (err) {
@@ -383,8 +399,11 @@ export default function Chat() {
                               </div>
                             ) : m.action.status === "applied" ? (
                               <p className="mt-2 inline-flex flex-wrap items-center gap-1 text-xs text-green-600">
-                                <ion-icon name="checkmark-circle-outline"></ion-icon> Appliqué
-                                {(m.action.kind === "create_plan" || m.action.kind === "adapt_plan") && (
+                                <ion-icon name="checkmark-circle-outline"></ion-icon>
+                                {m.action.kind === "create_workout" ? " Envoyée sur Garmin" : " Appliqué"}
+                                {(m.action.kind === "create_plan" ||
+                                  m.action.kind === "adapt_plan" ||
+                                  m.action.kind === "edit_workout") && (
                                   <Link to="/plan" className="underline">— voir le plan</Link>
                                 )}
                                 {m.action.kind === "add_nutrition" && (

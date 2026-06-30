@@ -644,7 +644,7 @@ export default function Plan() {
                     )}
                     {(mw?.volume_km != null || mw?.seances_qualite != null) && (
                       <span className="text-xs text-neutral-500">
-                        {mw?.volume_km != null ? `~${mw.volume_km} km` : ""}
+                        {mw?.volume_km != null ? `~${Math.round(mw.volume_km)} km` : ""}
                         {mw?.seances_qualite != null ? ` · ${mw.seances_qualite} qualité` : ""}
                       </span>
                     )}
@@ -676,8 +676,8 @@ export default function Plan() {
                         {w.target && (
                           <p className="mt-0.5 text-xs text-neutral-500">
                             {[
-                              w.target.distance_km ? `${w.target.distance_km} km` : "",
-                              w.target.duree_min ? `${w.target.duree_min} min` : "",
+                              w.target.distance_km ? `${Math.round(w.target.distance_km * 10) / 10} km` : "",
+                              w.target.duree_min ? `${Math.round(w.target.duree_min)} min` : "",
                               w.target.allure ? `allure ${w.target.allure}` : "",
                               w.target.zone_fc ? `FC ${w.target.zone_fc}` : "",
                             ].filter(Boolean).join(" · ")}

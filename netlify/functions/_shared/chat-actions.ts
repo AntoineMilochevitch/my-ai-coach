@@ -8,7 +8,13 @@
  */
 import type { LlmClient, TokenUsage } from "./llm/index.ts";
 
-export type ActionKind = "create_plan" | "adapt_plan" | "add_nutrition" | "add_note";
+export type ActionKind =
+  | "create_plan"
+  | "adapt_plan"
+  | "add_nutrition"
+  | "add_note"
+  | "create_workout"
+  | "edit_workout";
 
 export interface DetectedAction {
   kind: ActionKind;
@@ -32,20 +38,30 @@ l'athlète, détermine s'il demande EXPLICITEMENT d'effectuer une action, et laq
 Actions :
 - "create_plan" : créer/générer un NOUVEAU plan d'entraînement. Remplis objective
   ("5 km"|"10 km"|"Semi-marathon"|"Marathon"|"Trail"|"Forme générale"), targetTime (chrono visé,
-  ex "45:00" ou "3h30"), distanceKm/elevationM (trail), weeks OU targetDate (AAAA-MM-JJ),
-  sessionsPerWeek ou preferredDays (1=lundi..7=dimanche), maxSessionMin, level, constraints.
+  ex "45:00" ou "3h30"), distanceKm/elevationM (trail), sessionsPerWeek ou preferredDays
+  (1=lundi..7=dimanche), maxSessionMin, level, constraints.
+  IMPÉRATIF : si l'athlète précise une DURÉE en semaines (ex. "sur 4 semaines"), renseigne weeks
+  avec ce nombre EXACT. S'il donne une date d'objectif, renseigne targetDate (AAAA-MM-JJ).
   Ne propose create_plan QUE si l'objectif est clair (et un chrono pour une course) ; sinon "none".
 - "adapt_plan" : adapter/ajuster le plan ACTUEL à la forme récente. Aucun argument.
 - "add_nutrition" : enregistrer un repas. Remplis meal (Petit-déjeuner|Déjeuner|Dîner|Collation),
   date (AAAA-MM-JJ, défaut aujourd'hui), items[] {label, calories, protein_g, carbs_g, fat_g} en
   ESTIMANT les valeurs nutritionnelles de chaque aliment.
 - "add_note" : enregistrer une note / un ressenti. Remplis content (et date si précisée).
+- "create_workout" : créer UNE séance de COURSE et l'envoyer sur la montre Garmin. Remplis title,
+  sport (par défaut "running"), date (AAAA-MM-JJ, défaut demain), description (contenu détaillé de
+  la séance, ex. "échauffement 15min, 5x800m allure 10k récup 2min, retour au calme"), et si
+  pertinent distance_km, duree_min, allure, sessionType (easy|long|tempo|interval|recovery).
+- "edit_workout" : modifier une séance EXISTANTE du plan. Remplis date (jour de la séance à
+  modifier) et UNIQUEMENT les champs à changer parmi : title, description, distance_km, duree_min,
+  allure, sessionType.
 - "none" : simple question/discussion, ou information insuffisante (le coach répondra normalement).
 
 Champs de sortie :
 - action : une valeur ci-dessus.
 - assistant : 1 courte phrase d'introduction adressée à l'athlète (tutoiement).
-- summary : récapitulatif lisible et concis de l'action proposée (ce que l'athlète va confirmer).
+- summary : récapitulatif lisible listant les PARAMÈTRES CLÉS de l'action, pour que l'athlète
+  vérifie avant de confirmer (create_plan : objectif, durée/échéance, séances par semaine, jours).
 - args : uniquement les champs pertinents (vide pour "none" et "adapt_plan").
 En cas de doute, choisis "none".`;
 
@@ -85,13 +101,27 @@ const SCHEMA = {
         meal: { type: "STRING" },
         items: { type: "ARRAY", items: ITEM },
         content: { type: "STRING" },
+        title: { type: "STRING" },
+        sport: { type: "STRING" },
+        description: { type: "STRING" },
+        sessionType: { type: "STRING" },
+        distance_km: { type: "NUMBER" },
+        duree_min: { type: "INTEGER" },
+        allure: { type: "STRING" },
       },
     },
   },
   required: ["action"],
 };
 
-const VALID: ActionKind[] = ["create_plan", "adapt_plan", "add_nutrition", "add_note"];
+const VALID: ActionKind[] = [
+  "create_plan",
+  "adapt_plan",
+  "add_nutrition",
+  "add_note",
+  "create_workout",
+  "edit_workout",
+];
 
 export async function detectAction(
   llm: LlmClient,
