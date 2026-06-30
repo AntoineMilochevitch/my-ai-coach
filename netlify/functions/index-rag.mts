@@ -11,6 +11,7 @@ import { embed, type EmbedConfig } from "./_shared/embeddings.ts";
 import { loadAiConfig } from "./_shared/ai-config.ts";
 import { recordUsage } from "./_shared/usage.ts";
 import { mapLimit } from "./_shared/concurrency.ts";
+import { isRateLimit } from "./_shared/llm/index.ts";
 
 const BATCH = 40; // nb de chunks (ré)indexés par appel
 const HARD_CAP = 800; // borne de sécurité par source
@@ -177,6 +178,8 @@ export default async (req: Request): Promise<Response> => {
     return json({ indexed: rows.length, remaining: missing.length - rows.length });
   } catch (err) {
     if (err instanceof HttpError) return json({ error: err.message }, err.status);
+    // Limite d'embeddings atteinte : on s'arrête proprement (best-effort), pas d'erreur 500.
+    if (isRateLimit(err)) return json({ indexed: 0, remaining: 0, rateLimited: true });
     return json({ error: (err as Error).message }, 500);
   }
 };

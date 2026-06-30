@@ -7,7 +7,7 @@
  *  -> flux texte (text/plain) + en-tête x-conversation-id
  */
 import { requireUser, HttpError, json } from "./_shared/supabase.ts";
-import { getLlm, type ChatTurn, type TokenUsage } from "./_shared/llm/index.ts";
+import { getLlm, isRateLimit, type ChatTurn, type TokenUsage } from "./_shared/llm/index.ts";
 import { embed } from "./_shared/embeddings.ts";
 import { loadAiConfig } from "./_shared/ai-config.ts";
 import { checkQuota, recordUsage } from "./_shared/usage.ts";
@@ -372,6 +372,14 @@ export default async (req: Request): Promise<Response> => {
     });
   } catch (err) {
     if (err instanceof HttpError) return json({ error: err.message }, err.status);
+    if (isRateLimit(err))
+      return json(
+        {
+          error:
+            "Limite de l'API atteinte sur les modèles disponibles. Réessaie dans un instant, ou change de modèle/fournisseur dans ton profil.",
+        },
+        429,
+      );
     return json({ error: (err as Error).message }, 500);
   }
 };

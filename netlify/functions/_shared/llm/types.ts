@@ -60,7 +60,10 @@ export class MaxTokensError extends Error {
 }
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const RETRYABLE = new Set([429, 500, 503, 529]);
+// On NE retente PAS le 429 (limite de débit) : on bascule plutôt vite vers un
+// autre modèle (voir getLlm + repli). Seules les erreurs vraiment transitoires
+// (surcharge serveur) sont retentées.
+const RETRYABLE = new Set([500, 503, 529]);
 
 /** POST avec retry exponentiel court sur surcharge temporaire. */
 export async function fetchRetry(
