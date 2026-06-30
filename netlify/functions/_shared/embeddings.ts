@@ -13,13 +13,19 @@ export interface EmbedConfig {
   model: string;
 }
 
-async function embedGemini(apiKey: string, model: string, text: string): Promise<number[]> {
+async function embedGemini(
+  apiKey: string,
+  model: string,
+  text: string,
+  timeoutMs: number,
+): Promise<number[]> {
   const resp = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:embedContent`,
     {
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({ model: `models/${model}`, content: { parts: [{ text }] } }),
+      signal: AbortSignal.timeout(timeoutMs),
     },
   );
   if (!resp.ok)
@@ -30,11 +36,17 @@ async function embedGemini(apiKey: string, model: string, text: string): Promise
   return values;
 }
 
-async function embedOpenAI(apiKey: string, model: string, text: string): Promise<number[]> {
+async function embedOpenAI(
+  apiKey: string,
+  model: string,
+  text: string,
+  timeoutMs: number,
+): Promise<number[]> {
   const resp = await fetch("https://api.openai.com/v1/embeddings", {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({ model, input: text, dimensions: EMBED_DIM }),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!resp.ok)
     throw new Error(`Embedding OpenAI ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
@@ -44,12 +56,16 @@ async function embedOpenAI(apiKey: string, model: string, text: string): Promise
   return values;
 }
 
-export async function embed(cfg: EmbedConfig, text: string): Promise<number[]> {
+export async function embed(
+  cfg: EmbedConfig,
+  text: string,
+  timeoutMs = 8000,
+): Promise<number[]> {
   if (!cfg.apiKey) throw new Error("Clé d'embeddings manquante");
   const v =
     cfg.provider === "openai"
-      ? await embedOpenAI(cfg.apiKey, cfg.model, text)
-      : await embedGemini(cfg.apiKey, cfg.model, text);
+      ? await embedOpenAI(cfg.apiKey, cfg.model, text, timeoutMs)
+      : await embedGemini(cfg.apiKey, cfg.model, text, timeoutMs);
   if (v.length !== EMBED_DIM)
     throw new Error(`Dimension d'embedding inattendue (${v.length} ≠ ${EMBED_DIM})`);
   return v;
