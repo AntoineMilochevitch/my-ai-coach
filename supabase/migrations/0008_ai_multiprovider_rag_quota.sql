@@ -69,6 +69,8 @@ create table if not exists public.ai_usage (
   primary key (user_id, day, kind)
 );
 alter table public.ai_usage enable row level security;
+-- idempotent : CREATE POLICY ne supporte pas IF NOT EXISTS.
+drop policy if exists "ai_usage_select_own" on public.ai_usage;
 create policy "ai_usage_select_own" on public.ai_usage
   for select using (user_id = auth.uid());
 
@@ -108,6 +110,7 @@ create table if not exists public.training_notes (
   created_at timestamptz not null default now()
 );
 alter table public.training_notes enable row level security;
+drop policy if exists "training_notes_all_own" on public.training_notes;
 create policy "training_notes_all_own" on public.training_notes
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 create index if not exists training_notes_user_date_idx
