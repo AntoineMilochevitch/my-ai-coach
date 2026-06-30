@@ -10,6 +10,7 @@ import { requireUser, HttpError, json } from "./_shared/supabase.ts";
 import { embed, type EmbedConfig } from "./_shared/embeddings.ts";
 import { loadAiConfig } from "./_shared/ai-config.ts";
 import { recordUsage } from "./_shared/usage.ts";
+import { mapLimit } from "./_shared/concurrency.ts";
 
 const BATCH = 40; // nb de chunks (ré)indexés par appel
 const HARD_CAP = 800; // borne de sécurité par source
@@ -152,28 +153,18 @@ export default async (req: Request): Promise<Response> => {
     const todo = missing.slice(0, BATCH);
 
     // 3) Embeddings (concurrence bornée) + upsert.
-    let embedded = 0;
-    const limit = 5;
-    let i = 0;
-    const rows: any[] = new Array(todo.length);
-    await Promise.all(
-      Array.from({ length: Math.min(limit, todo.length) }, async () => {
-        while (i < todo.length) {
-          const idx = i++;
-          const it = todo[idx];
-          const embedding = await embed(embedCfg, it.content);
-          embedded++;
-          rows[idx] = {
-            user_id: user.id,
-            source_type: it.sourceType,
-            source_id: it.sourceId,
-            content: it.content,
-            embedding,
-            embed_model: embedCfg.model,
-          };
-        }
-      }),
-    );
+    const rows = await mapLimit(todo, 5, async (it) => {
+      const embedding = await embed(embedCfg, it.content);
+      return {
+        user_id: user.id,
+        source_type: it.sourceType,
+        source_id: it.sourceId,
+        content: it.content,
+        embedding,
+        embed_model: embedCfg.model,
+      };
+    });
+    const embedded = rows.length;
 
     if (rows.length) {
       const { error } = await sb

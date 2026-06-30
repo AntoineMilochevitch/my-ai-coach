@@ -64,13 +64,18 @@ export default async (req: Request): Promise<Response> => {
       conversationId = data.id;
     }
 
-    // Enregistre le message utilisateur.
-    await sb.from("chat_messages").insert({
-      conversation_id: conversationId,
-      user_id: user.id,
-      role: "user",
-      content: message,
-    });
+    // Enregistre le message utilisateur (id conservé pour rollback si échec).
+    const { data: userMsg } = await sb
+      .from("chat_messages")
+      .insert({
+        conversation_id: conversationId,
+        user_id: user.id,
+        role: "user",
+        content: message,
+      })
+      .select("id")
+      .single();
+    const userMsgId = userMsg?.id;
 
     // --- Contexte athlète (scopé au user) ---
     const since90 = new Date(Date.now() - 90 * 86400000).toISOString();
@@ -268,11 +273,23 @@ export default async (req: Request): Promise<Response> => {
     if (contents.length === 0) contents.push({ role: "user", text: message });
 
     // --- Génération en streaming (provider -> flux texte vers le client) ---
-    const gen = await llm.stream(system, contents, {
-      temperature: 0.7,
-      maxOutputTokens: 3072,
-      signal: req.signal,
-    });
+    let gen: Awaited<ReturnType<typeof llm.stream>>;
+    try {
+      gen = await llm.stream(system, contents, {
+        temperature: 0.7,
+        maxOutputTokens: 3072,
+        signal: req.signal,
+      });
+    } catch (e) {
+      // Échec avant tout token : on retire le message user pour ne pas le laisser
+      // orphelin (sans réponse) dans la conversation.
+      if (userMsgId)
+        await sb.from("chat_messages").delete().eq("id", userMsgId).then(
+          () => {},
+          () => {},
+        );
+      throw e;
+    }
 
     const convId = conversationId;
     const stream = new ReadableStream<Uint8Array>({

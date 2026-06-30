@@ -126,6 +126,10 @@ export default function Plan() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const pollingRef = useRef(false);
+  // created_at du plan le plus récent AVANT de lancer une génération : on n'accepte
+  // un plan "active" comme terminé que s'il est plus récent (évite de prendre
+  // l'ancien plan encore en place tant que la nouvelle génération n'a pas démarré).
+  const genBaseline = useRef<string | null>(null);
 
   // Formulaire
   const [mode, setMode] = useState<"weeks" | "date">("weeks");
@@ -170,11 +174,13 @@ export default function Plan() {
         await new Promise((r) => setTimeout(r, 2500));
         const { data: p } = await supabase
           .from("training_plans")
-          .select("status, content")
+          .select("status, content, created_at")
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
-        if (p?.status === "active") {
+        const isNewer =
+          !genBaseline.current || !p?.created_at || p.created_at > genBaseline.current;
+        if (p?.status === "active" && isNewer) {
           setGenerating(false);
           await load();
           return;
@@ -215,6 +221,7 @@ export default function Plan() {
     } else if (p.status === "generating") {
       setGenerating(true);
       setShowForm(false);
+      genBaseline.current = null; // génération déjà en cours : accepte tout "active"
       pollPlan();
     } else if (p.status === "active") {
       setPlan(p);
@@ -258,6 +265,14 @@ export default function Plan() {
     setError(null);
     setInfo(null);
     try {
+      // Baseline : plan le plus récent actuel (pour distinguer le nouveau plan).
+      const { data: prev } = await supabase
+        .from("training_plans")
+        .select("created_at")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      genBaseline.current = prev?.created_at ?? "1970-01-01";
       await generatePlan(input);
       await pollPlan();
     } catch (err) {

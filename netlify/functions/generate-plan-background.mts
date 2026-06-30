@@ -15,6 +15,7 @@ import { getLlm, MaxTokensError, type LlmClient } from "./_shared/llm/index.ts";
 import { loadAiConfig } from "./_shared/ai-config.ts";
 import { checkQuota, recordUsage } from "./_shared/usage.ts";
 import { upcomingMondayUtc, isoDateUtc } from "./_shared/dates.ts";
+import { sanitizeSteps } from "./_shared/plan-steps.ts";
 
 const BLOCK_WEEKS = 4;
 
@@ -349,7 +350,7 @@ export default async (req: Request): Promise<Response> => {
             allure: s.allure ?? null,
             zone_fc: s.zone_fc ?? null,
           },
-          steps: Array.isArray(s.steps) ? s.steps : null,
+          steps: sanitizeSteps(s.steps),
           status: "planned",
         });
       }

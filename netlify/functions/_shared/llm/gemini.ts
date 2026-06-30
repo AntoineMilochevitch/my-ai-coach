@@ -51,20 +51,27 @@ export function geminiClient(apiKey: string, model: string): LlmClient {
     provider: "gemini",
     model,
     async generate(system, userText, opts = {}) {
-      const gc: Record<string, unknown> = {
+      const base: Record<string, unknown> = {
         temperature: opts.temperature ?? 0.6,
         maxOutputTokens: opts.maxOutputTokens ?? 4096,
       };
-      if (opts.thinkingBudget != null)
-        gc.thinkingConfig = { thinkingBudget: opts.thinkingBudget };
-      const r = await call(
-        {
-          system_instruction: { parts: [{ text: system }] },
-          contents: [{ role: "user", parts: [{ text: userText }] }],
-          generationConfig: gc,
-        },
-        opts.signal,
-      );
+      const mk = (think: boolean) => ({
+        system_instruction: { parts: [{ text: system }] },
+        contents: [{ role: "user", parts: [{ text: userText }] }],
+        generationConfig:
+          think && opts.thinkingBudget != null
+            ? { ...base, thinkingConfig: { thinkingBudget: opts.thinkingBudget } }
+            : base,
+      });
+      let r: GenResult;
+      try {
+        r = await call(mk(true), opts.signal);
+      } catch (e) {
+        // Certains modèles refusent thinkingConfig (ex. budget 0 sur 2.5-pro).
+        if (opts.thinkingBudget != null && /thinking/i.test((e as Error).message)) {
+          r = await call(mk(false), opts.signal);
+        } else throw e;
+      }
       if (!r.text)
         throw new Error(`Réponse Gemini vide (finishReason=${r.finishReason ?? "?"})`);
       return r;
