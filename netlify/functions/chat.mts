@@ -83,12 +83,32 @@ export default async (req: Request): Promise<Response> => {
     // ajouter nutrition/note), on répond par une PROPOSITION (carte à confirmer)
     // au lieu d'une réponse en streaming.
     if (mightBeAction(message)) {
-      const { action, usage } = await detectAction(llm, message);
-      if (action) {
+      let detected: Awaited<ReturnType<typeof detectAction>>;
+      try {
+        detected = await detectAction(llm, message);
+      } catch (e) {
+        // Le classifieur a échoué (limite/timeout) : on NE lance PAS un 2e appel
+        // (anti-504). On retire le message user orphelin et on renvoie un message clair.
+        if (userMsgId)
+          await sb.from("chat_messages").delete().eq("id", userMsgId).then(
+            () => {},
+            () => {},
+          );
+        if (isRateLimit(e))
+          return json(
+            { error: "Limite de l'API atteinte. Réessaie dans un instant, ou change de modèle dans ton profil." },
+            429,
+          );
+        return json(
+          { error: "Le coach met trop de temps à répondre. Réessaie dans un instant." },
+          503,
+        );
+      }
+      if (detected.action) {
         const payload = {
-          kind: action.kind,
-          args: action.args,
-          summary: action.summary,
+          kind: detected.action.kind,
+          args: detected.action.args,
+          summary: detected.action.summary,
           status: "pending" as const,
         };
         const { data: am } = await sb
@@ -97,20 +117,22 @@ export default async (req: Request): Promise<Response> => {
             conversation_id: conversationId,
             user_id: user.id,
             role: "assistant",
-            content: action.assistant,
+            content: detected.action.assistant,
             action: payload,
           })
           .select("id")
           .single();
-        await recordUsage(sb, user.id, "chat", usage);
+        await recordUsage(sb, user.id, "chat", detected.usage);
         return json({
           type: "proposal",
           conversationId,
           messageId: am?.id ?? null,
-          content: action.assistant,
+          content: detected.action.assistant,
           action: payload,
         });
       }
+      // Pas une action ("none") : on poursuit vers la réponse en streaming
+      // (le stream comptabilisera l'usage).
     }
 
     // --- Contexte athlète (scopé au user) ---

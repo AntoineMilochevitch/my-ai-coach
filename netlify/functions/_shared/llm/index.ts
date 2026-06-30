@@ -37,10 +37,16 @@ export function isRateLimit(err: unknown): boolean {
   return /\b429\b|resource_exhausted|rate.?limit|quota|exhausted|overloaded|\b529\b/i.test(m);
 }
 
-/** Erreur justifiant d'essayer un AUTRE modèle (limite atteinte ou modèle indisponible). */
+/** Erreur justifiant d'essayer un AUTRE modèle (limite, indisponibilité, ou timeout). */
 function shouldFallback(err: unknown): boolean {
   const m = (err as Error)?.message ?? "";
-  return isRateLimit(err) || /\b403\b|\b404\b|not found|unavailable|unsupported/i.test(m);
+  const name = (err as { name?: string })?.name ?? "";
+  return (
+    isRateLimit(err) ||
+    name === "AbortError" ||
+    name === "TimeoutError" ||
+    /\b403\b|\b404\b|not found|unavailable|unsupported|abort|timeout|délai/i.test(m)
+  );
 }
 
 export function getLlm(provider: Provider, apiKey: string, model: string): LlmClient {

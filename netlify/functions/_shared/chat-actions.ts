@@ -127,31 +127,28 @@ export async function detectAction(
   llm: LlmClient,
   message: string,
 ): Promise<{ action: DetectedAction | null; usage: TokenUsage | null }> {
-  try {
-    const { data, usage } = await llm.generateJSON<{
-      action?: string;
-      assistant?: string;
-      summary?: string;
-      args?: Record<string, unknown>;
-    }>(SYSTEM, `Message de l'athlète : ${message}`, SCHEMA, {
-      temperature: 0.1,
-      maxOutputTokens: 1024,
-      thinkingBudget: 0,
-      timeoutMs: 7000, // borné : reste sous le timeout Netlify (chemin synchrone)
-    });
-    const kind = data.action as ActionKind;
-    if (!VALID.includes(kind)) return { action: null, usage };
-    return {
-      action: {
-        kind,
-        args: data.args ?? {},
-        summary: String(data.summary ?? "").slice(0, 600),
-        assistant: String(data.assistant ?? data.summary ?? "Action proposée :").slice(0, 300),
-      },
-      usage,
-    };
-  } catch {
-    // En cas d'échec du classifieur, on retombe sur le chat normal.
-    return { action: null, usage: null };
-  }
+  // Les erreurs (limite/timeout) sont PROPAGÉES : l'appelant doit décider
+  // (message clair) plutôt que d'enchaîner un second appel modèle (risque de 504).
+  const { data, usage } = await llm.generateJSON<{
+    action?: string;
+    assistant?: string;
+    summary?: string;
+    args?: Record<string, unknown>;
+  }>(SYSTEM, `Message de l'athlète : ${message}`, SCHEMA, {
+    temperature: 0.1,
+    maxOutputTokens: 1024,
+    thinkingBudget: 0,
+    timeoutMs: 7000, // borné : reste sous le timeout Netlify (chemin synchrone)
+  });
+  const kind = data.action as ActionKind;
+  if (!VALID.includes(kind)) return { action: null, usage };
+  return {
+    action: {
+      kind,
+      args: data.args ?? {},
+      summary: String(data.summary ?? "").slice(0, 600),
+      assistant: String(data.assistant ?? data.summary ?? "Action proposée :").slice(0, 300),
+    },
+    usage,
+  };
 }
