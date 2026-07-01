@@ -10,7 +10,7 @@ export default function CoachAnalysis({ days }: { days: number }) {
   const [createdAt, setCreatedAt] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true); // fermé par défaut
 
   const loadLatest = useCallback(async () => {
     const { data } = await supabase

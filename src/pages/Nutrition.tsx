@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import Markdown from "react-markdown";
 import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import Layout from "../components/Layout";
+import Tabs, { type TabDef } from "../components/Tabs";
 import Spinner from "../components/Spinner";
 import { nutritionAdviceBackground, nutritionPlanBackground, estimateNutrition } from "../lib/api";
 import NutritionPlan, { type NPlan } from "../components/NutritionPlan";
+
+const NUTRI_TABS: TabDef[] = [
+  { key: "journal", label: "Journal", icon: "journal-outline" },
+  { key: "plan", label: "Plan", icon: "restaurant-outline" },
+  { key: "conseils", label: "Conseils", icon: "nutrition-outline" },
+];
 
 interface Entry {
   id: string;
@@ -29,6 +37,10 @@ export default function Nutrition() {
   const [date, setDate] = useState(todayIso());
   const [entries, setEntries] = useState<Entry[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const nutriTab = searchParams.get("t") ?? "journal";
+  const setNutriTab = (k: string) =>
+    setSearchParams(k === "journal" ? {} : { t: k }, { replace: true });
 
   // Formulaire
   const [meal, setMeal] = useState(MEALS[0]);
@@ -245,6 +257,21 @@ export default function Nutrition() {
           <h1 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100">
             Nutrition
           </h1>
+        </div>
+
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        <Tabs tabs={NUTRI_TABS} active={nutriTab} onChange={setNutriTab} />
+
+        <div key={nutriTab} className="animate-tabpanel space-y-6">
+        {nutriTab === "journal" && (
+        <>
+        <div className="flex items-center justify-end gap-2">
+          <span className="text-sm text-neutral-500">Journée du</span>
           <input
             type="date"
             value={date}
@@ -253,12 +280,6 @@ export default function Nutrition() {
             className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
           />
         </div>
-
-        {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            {error}
-          </div>
-        )}
 
         {/* Totaux du jour */}
         <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -359,8 +380,11 @@ export default function Nutrition() {
             </div>
           )}
         </section>
+        </>
+        )}
 
-        {/* Plan nutrition recommandé (IA) */}
+        {nutriTab === "plan" && (
+        /* Plan nutrition recommandé (IA) */
         <section className="rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="flex items-center gap-2 font-medium text-neutral-900 dark:text-neutral-100">
@@ -410,8 +434,10 @@ export default function Nutrition() {
             )}
           </div>
         </section>
+        )}
 
-        {/* Conseils IA */}
+        {nutriTab === "conseils" && (
+        /* Conseils IA */
         <section className="rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="flex items-center gap-2 font-medium text-neutral-900 dark:text-neutral-100">
@@ -446,6 +472,8 @@ export default function Nutrition() {
             )}
           </div>
         </section>
+        )}
+        </div>
       </main>
     </Layout>
   );
