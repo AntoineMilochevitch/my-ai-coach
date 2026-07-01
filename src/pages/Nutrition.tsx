@@ -48,6 +48,7 @@ export default function Nutrition() {
   const [nplan, setNplan] = useState<NPlan | null>(null);
   const [nplanBusy, setNplanBusy] = useState(false);
   const [nplanConstraints, setNplanConstraints] = useState("");
+  const [nplanInEffort, setNplanInEffort] = useState(false);
 
   const load = useCallback(async (d: string) => {
     const { data, error: e } = await supabase
@@ -153,7 +154,7 @@ export default function Nutrition() {
         .select("updated_at")
         .maybeSingle();
       const baseline = prev?.updated_at ?? "1970-01-01";
-      await nutritionPlanBackground(nplanConstraints.trim() || undefined);
+      await nutritionPlanBackground(nplanConstraints.trim() || undefined, nplanInEffort);
       const start = Date.now();
       for (;;) {
         await new Promise((r) => setTimeout(r, 2500));
@@ -384,6 +385,15 @@ export default function Nutrition() {
             placeholder="Contraintes (optionnel) : végétarien, 70 kg, allergies…"
             className={inputCls}
           />
+          <label className="mt-2 flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
+            <input
+              type="checkbox"
+              checked={nplanInEffort}
+              onChange={(e) => setNplanInEffort(e.target.checked)}
+              className="h-4 w-4"
+            />
+            Inclure le ravitaillement pendant l'effort
+          </label>
           <div className="mt-4">
             {nplanBusy ? (
               <p className="flex items-center gap-2 text-sm text-neutral-500">

@@ -4,6 +4,7 @@ import Layout from "../components/Layout";
 import Spinner from "../components/Spinner";
 import CoachAnalysis from "../components/CoachAnalysis";
 import Notes from "../components/Notes";
+import ActivityLogModal, { type ActivityLog } from "../components/ActivityLogModal";
 import { HrTrendChart, PaceTrendChart, VolumeChart } from "../components/Charts";
 import type { Activity } from "../lib/types";
 import { formatDuration, formatKm, formatPace, weekStart } from "../lib/format";
@@ -26,6 +27,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [rangeKey, setRangeKey] = useState<RangeKey>("week");
   const [sport, setSport] = useState<string>("all");
+  const [logs, setLogs] = useState<Record<string, ActivityLog>>({});
+  const [logActivity, setLogActivity] = useState<Activity | null>(null);
 
   const range = RANGES.find((r) => r.key === rangeKey)!;
 
@@ -55,6 +58,14 @@ export default function Dashboard() {
     setVo2max(dm?.vo2max ?? null);
     setVo2Source(dm?.vo2max_source ?? null);
     setRestingHr(dm?.resting_hr ?? null);
+
+    const { data: lg } = await supabase
+      .from("activity_logs")
+      .select("id, activity_id, ressenti, fueled, intake, carbs_g, fluids_ml, calories");
+    const map: Record<string, ActivityLog> = {};
+    for (const l of lg ?? []) map[l.activity_id] = l as ActivityLog;
+    setLogs(map);
+
     setLoading(false);
   }, []);
 
@@ -202,38 +213,73 @@ export default function Dashboard() {
                     <th className="py-2 pr-4">Durée</th>
                     <th className="py-2 pr-4">Allure</th>
                     <th className="py-2 pr-4">FC moy.</th>
+                    <th className="py-2 text-right">Journal</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.slice(0, 25).map((a) => (
-                    <tr
-                      key={a.id}
-                      className="border-t border-neutral-100 dark:border-neutral-800"
-                    >
-                      <td className="py-2 pr-4">
-                        {a.start_time
-                          ? new Date(a.start_time).toLocaleDateString("fr-FR")
-                          : "—"}
-                      </td>
-                      <td className="py-2 pr-4">
-                        {a.activity_type ? prettySport(a.activity_type) : "—"}
-                      </td>
-                      <td className="py-2 pr-4">{formatKm(a.distance_m)}</td>
-                      <td className="py-2 pr-4">{formatDuration(a.duration_s)}</td>
-                      <td className="py-2 pr-4">
-                        {a.activity_type?.includes("running")
-                          ? formatPace(a.avg_pace_s_per_km)
-                          : "—"}
-                      </td>
-                      <td className="py-2 pr-4">{a.avg_hr ?? "—"}</td>
-                    </tr>
-                  ))}
+                  {filtered.slice(0, 25).map((a) => {
+                    const hasLog = Boolean(logs[a.id]);
+                    return (
+                      <tr
+                        key={a.id}
+                        className="border-t border-neutral-100 dark:border-neutral-800"
+                      >
+                        <td className="py-2 pr-4">
+                          {a.start_time
+                            ? new Date(a.start_time).toLocaleDateString("fr-FR")
+                            : "—"}
+                        </td>
+                        <td className="py-2 pr-4">
+                          {a.activity_type ? prettySport(a.activity_type) : "—"}
+                        </td>
+                        <td className="py-2 pr-4">{formatKm(a.distance_m)}</td>
+                        <td className="py-2 pr-4">{formatDuration(a.duration_s)}</td>
+                        <td className="py-2 pr-4">
+                          {a.activity_type?.includes("running")
+                            ? formatPace(a.avg_pace_s_per_km)
+                            : "—"}
+                        </td>
+                        <td className="py-2 pr-4">{a.avg_hr ?? "—"}</td>
+                        <td className="py-2 text-right">
+                          <button
+                            onClick={() => setLogActivity(a)}
+                            title={hasLog ? "Modifier le ressenti / ravitaillement" : "Ajouter ressenti / ravitaillement"}
+                            className={`inline-flex items-center gap-1 text-xs ${hasLog ? "text-green-600" : "text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"}`}
+                          >
+                            <ion-icon name={hasLog ? "checkmark-circle-outline" : "add-circle-outline"}></ion-icon>
+                            {hasLog ? "Noté" : "Noter"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
         </section>
       </main>
+
+      {logActivity && (
+        <ActivityLogModal
+          activityId={logActivity.id}
+          activityLabel={`${
+            logActivity.start_time ? new Date(logActivity.start_time).toLocaleDateString("fr-FR") : ""
+          } · ${logActivity.activity_type ? prettySport(logActivity.activity_type) : "activité"} · ${formatKm(logActivity.distance_m)}`}
+          log={logs[logActivity.id] ?? null}
+          onClose={() => setLogActivity(null)}
+          onSaved={(l) => {
+            const aid = logActivity.id;
+            setLogs((m) => {
+              const copy = { ...m };
+              if (l) copy[aid] = l;
+              else delete copy[aid];
+              return copy;
+            });
+            setLogActivity(null);
+          }}
+        />
+      )}
     </Layout>
   );
 }

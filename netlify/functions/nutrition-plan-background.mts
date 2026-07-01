@@ -68,6 +68,19 @@ const SCHEMA = {
     },
     hydratation: { type: "STRING" },
     autour_seances: { type: "STRING" },
+    pendant_effort: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          duree: { type: "STRING" }, // ex "< 1h", "1-2h", "> 2h"
+          glucides: { type: "STRING" }, // ex "30-60 g/h"
+          hydratation: { type: "STRING" }, // ex "400-600 ml/h + électrolytes"
+          exemples: { type: "STRING" }, // ex "gel, boisson glucidique, banane"
+        },
+        required: ["duree"],
+      },
+    },
   },
   required: ["repas"],
 };
@@ -83,6 +96,7 @@ export default async (req: Request): Promise<Response> => {
   const { user, sb } = ctx;
   const body = await req.json().catch(() => ({}));
   const constraints = String(body.constraints || "").slice(0, 500);
+  const includeInEffort = body.includeInEffort === true;
   let model: string | null = null;
 
   try {
@@ -104,9 +118,14 @@ export default async (req: Request): Promise<Response> => {
       contraintes: constraints || null,
       contexte: context,
     };
+    const inEffortClause = includeInEffort
+      ? "Inclus AUSSI un plan de ravitaillement PENDANT l'effort (pendant_effort), par durée de séance " +
+        "(< 1h, 1-2h, > 2h) : glucides par heure, hydratation, et exemples concrets."
+      : "N'inclus PAS de ravitaillement pendant l'effort : laisse pendant_effort vide.";
     const userText =
-      "Construis mon plan nutrition personnalisé (JSON) à partir de ces données :\n\n" +
-      "```json\n" +
+      "Construis mon plan nutrition personnalisé (JSON) à partir de ces données. " +
+      inEffortClause +
+      "\n\n```json\n" +
       JSON.stringify(athlete, null, 2) +
       "\n```";
 

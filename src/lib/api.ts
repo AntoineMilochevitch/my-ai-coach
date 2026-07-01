@@ -139,8 +139,8 @@ export const nutritionAdviceBackground = (days?: number) =>
   post<Record<string, never>>("nutrition-advice-background", { days });
 
 // Plan nutrition (repas recommandés) EN ARRIÈRE-PLAN (202). Le client interroge nutrition_plans.
-export const nutritionPlanBackground = (constraints?: string) =>
-  post<Record<string, never>>("nutrition-plan-background", { constraints });
+export const nutritionPlanBackground = (constraints?: string, includeInEffort?: boolean) =>
+  post<Record<string, never>>("nutrition-plan-background", { constraints, includeInEffort });
 
 export const estimateNutrition = (description: string) =>
   post<{

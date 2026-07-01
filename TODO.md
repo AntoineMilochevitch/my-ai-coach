@@ -12,7 +12,7 @@
 
 - [x] **logo** - Faire un prompt pour générer un logo pour le site et le mettre dans le site et en favicon. *(Fait : logo SVG `src/components/Logo.tsx` dans l'en-tête + `public/favicon.svg`. Prompt de génération fourni si remplacement par un logo IA souhaité.)*
 
-- [ ] **Nutrition pendant l'effort** - inclure un plan de nutrition pendant l'effort (optionnel que l'utilisateur peut demander ou non), et après chaque activité, la possibilité, en plus d'ajouté sont ressenti, dire si on a mangé et bu, quoi, et les valeur nutritionnelle.
+- [x] **Nutrition pendant l'effort** - inclure un plan de nutrition pendant l'effort (optionnel que l'utilisateur peut demander ou non), et après chaque activité, la possibilité, en plus d'ajouté sont ressenti, dire si on a mangé et bu, quoi, et les valeur nutritionnelle. *(Fait : case « Inclure le ravitaillement pendant l'effort » dans le plan nutrition (section `pendant_effort` par durée de séance) ; journal post-activité `activity_logs` (ressenti + mangé/bu, quoi, glucides/liquides/kcal) via un bouton « Noter » sur chaque activité du Dashboard ; le coach a ces journaux en contexte. Migration 0013.)*
 
 - [x] **Améliorer la nutrition** - Le but étant que dans le plan d'entrainement, l'ia me recommande des repas avec les score nutritionnel qu'il faut. Une petit explication. Je pourrais lui demander des détails sur les repas comme la recette ou lui demander de changer dans l'onglet chat. *(Fait : `nutrition-plan-background` génère un plan (besoins par type de jour + repas type avec macros cibles + idées + explications) ; section « Plan nutrition (IA) » sur la page Nutrition ; action chat `nutrition_plan` pour générer/adapter, et le coach a le plan en contexte pour donner recettes/ajustements. Migration 0012.)*
 

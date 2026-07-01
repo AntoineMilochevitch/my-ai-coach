@@ -13,12 +13,19 @@ interface Meal extends Macros {
   idee?: string;
   rationale?: string;
 }
+interface InEffort {
+  duree?: string;
+  glucides?: string;
+  hydratation?: string;
+  exemples?: string;
+}
 export interface NPlan {
   resume?: string;
   besoins_journaliers?: DayNeed[];
   repas?: Meal[];
   hydratation?: string;
   autour_seances?: string;
+  pendant_effort?: InEffort[];
   error?: string;
 }
 
@@ -85,6 +92,40 @@ export default function NutritionPlan({ plan }: { plan: NPlan }) {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {plan.pendant_effort && plan.pendant_effort.length > 0 && (
+        <div>
+          <h3 className="flex items-center gap-1.5 text-sm font-semibold text-neutral-700 dark:text-neutral-300">
+            <ion-icon name="flash-outline"></ion-icon> Ravitaillement pendant l'effort
+          </h3>
+          <div className="mt-2 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-neutral-500">
+                  <th className="py-1 pr-4">Durée</th>
+                  <th className="py-1 pr-4">Glucides</th>
+                  <th className="py-1 pr-4">Hydratation</th>
+                  <th className="py-1">Exemples</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plan.pendant_effort.map((e, i) => (
+                  <tr key={i} className="border-t border-neutral-100 dark:border-neutral-800">
+                    <td className="py-1.5 pr-4 font-medium text-neutral-800 dark:text-neutral-200">
+                      {e.duree}
+                    </td>
+                    <td className="py-1.5 pr-4 text-neutral-600 dark:text-neutral-400">{e.glucides}</td>
+                    <td className="py-1.5 pr-4 text-neutral-600 dark:text-neutral-400">
+                      {e.hydratation}
+                    </td>
+                    <td className="py-1.5 text-neutral-600 dark:text-neutral-400">{e.exemples}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
