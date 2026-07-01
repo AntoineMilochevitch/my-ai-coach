@@ -87,8 +87,8 @@ my-ai-coach/
 │   ├── garmin-mfa.mts          # validation MFA Garmin
 │   ├── garmin-sync.mts         # synchronisation Garmin
 │   ├── garmin-push-workout.mts # téléversement des séances vers Garmin
-│   ├── create-workout.mts      # crée une séance (IA) et l'envoie sur la montre
-│   ├── edit-workout.mts        # modifie une séance précise du plan
+│   ├── create-workout-background.mts # crée une séance (IA) → montre (arrière-plan)
+│   ├── edit-workout-background.mts   # modifie une séance précise (arrière-plan)
 │   ├── estimate-nutrition.mts  # estimation des macros d'un repas
 │   ├── scheduled-sync.mts      # cron : sync Garmin horaire
 │   └── scheduled-adapt.mts     # cron : adaptation hebdomadaire des plans

@@ -130,7 +130,7 @@ export default async (req: Request): Promise<Response> => {
       "\n```";
 
     const { data, usage } = await llm.generateJSON(SYSTEM, userText, SCHEMA, {
-      maxOutputTokens: 8192,
+      maxOutputTokens: 16384, // marge pour le ravitaillement pendant l'effort (JSON plus long)
       thinkingBudget: 1024,
       temperature: 0.5,
       timeoutMs: 40000,

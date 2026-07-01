@@ -240,6 +240,7 @@ export default function Chat() {
     if (!uid) return;
     setBusy(true);
     setError(null);
+    const sinceForResult = new Date().toISOString();
     try {
       if (a.kind === "create_plan") {
         await generatePlan(a.args as any);
@@ -271,13 +272,18 @@ export default function Chat() {
         });
         if (e) throw new Error(e.message);
       } else if (a.kind === "create_workout") {
-        await createWorkout(a.args);
+        await createWorkout(a.args, conversationId ?? undefined);
       } else if (a.kind === "edit_workout") {
-        await editWorkout(String(a.args.date || ""), a.args);
+        await editWorkout(String(a.args.date || ""), a.args, conversationId ?? undefined);
       } else if (a.kind === "nutrition_plan") {
         await nutritionPlanBackground(a.args.constraints as string | undefined);
       }
       await setActionStatus(m, "applied");
+      // Séances : générées/envoyées en arrière-plan → on attend le message résultat du coach.
+      if ((a.kind === "create_workout" || a.kind === "edit_workout") && conversationId) {
+        await pollAssistant(conversationId, sinceForResult);
+        await loadMessages(conversationId);
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -454,7 +460,7 @@ export default function Chat() {
                             ) : m.action.status === "applied" ? (
                               <p className="mt-2 inline-flex flex-wrap items-center gap-1 text-xs text-green-600">
                                 <ion-icon name="checkmark-circle-outline"></ion-icon>
-                                {m.action.kind === "create_workout" ? " Envoyée sur Garmin" : " Appliqué"}
+                                {" Appliqué"}
                                 {(m.action.kind === "create_plan" ||
                                   m.action.kind === "adapt_plan" ||
                                   m.action.kind === "edit_workout") && (
