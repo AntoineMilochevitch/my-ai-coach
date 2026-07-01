@@ -59,14 +59,14 @@ function toNum(v: unknown): number | null {
  * la première qui tombe dans une plage de course réaliste (~1,4–7 m/s ≈ 2:23–11:54/km).
  * Renvoie null si aucune interprétation n'est crédible (→ repli VDOT).
  */
-function plausibleRunSpeedMps(raw: number): number | null {
+export function plausibleRunSpeedMps(raw: number): number | null {
   for (const spd of [raw, raw * 10, raw / 3.6, raw * 3.6, raw / 10]) {
     if (spd >= 1.4 && spd <= 7.0) return spd;
   }
   return null;
 }
 
-function paceFromVdot(vdot: number, frac: number): number | null {
+export function paceFromVdot(vdot: number, frac: number): number | null {
   const targetVo2 = frac * vdot;
   const a = 0.000104;
   const b = 0.182258;

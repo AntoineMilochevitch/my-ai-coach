@@ -29,19 +29,13 @@ function statusOf(acwr: number | null): LoadStatus | null {
   return "very_high";
 }
 
-export async function trainingLoad(sb: SupabaseClient, userId: string): Promise<LoadBalance | null> {
-  const WEEKS = 6;
-  const since = new Date(Date.now() - WEEKS * 7 * 86400000).toISOString();
-  const { data } = await sb
-    .from("activities")
-    .select("start_time, training_load")
-    .eq("user_id", userId)
-    .gte("start_time", since)
-    .not("training_load", "is", null);
+const WEEKS = 6;
 
-  const acts = data ?? [];
-  const now = Date.now();
-
+/** Calcul PUR de l'équilibre de charge (testable sans base). `now` = ms epoch. */
+export function computeLoadBalance(
+  acts: { start_time: string | null; training_load: number | null }[],
+  now: number,
+): LoadBalance | null {
   // Fenêtres roulantes de 7 j : index 0 = plus ancienne … WEEKS-1 = semaine courante.
   const buckets = new Array(WEEKS).fill(0) as number[];
   for (const a of acts) {
@@ -78,6 +72,18 @@ export async function trainingLoad(sb: SupabaseClient, userId: string): Promise<
     weekly,
     trend_pct: trendPct,
   };
+}
+
+export async function trainingLoad(sb: SupabaseClient, userId: string): Promise<LoadBalance | null> {
+  const since = new Date(Date.now() - WEEKS * 7 * 86400000).toISOString();
+  const { data } = await sb
+    .from("activities")
+    .select("start_time, training_load")
+    .eq("user_id", userId)
+    .gte("start_time", since)
+    .not("training_load", "is", null);
+
+  return computeLoadBalance(data ?? [], Date.now());
 }
 
 /** Ligne texte compacte pour le contexte IA. "" si non calculable. */

@@ -204,6 +204,16 @@ Scripts disponibles :
 | `npm run build` | build de production (`dist/`) |
 | `npm run preview` | prévisualisation du build |
 | `npm run typecheck` | vérification TypeScript (`tsc --noEmit`) |
+| `npm run lint` | ESLint (flat config, TS + react-hooks) |
+| `npm run test` | tests unitaires (Vitest) |
+| `npm run test:watch` | tests en mode watch |
+
+### Qualité / CI
+
+La logique métier pure est couverte par des tests **Vitest** (allures VDOT, normalisation
+de la vitesse seuil Garmin, ACWR, classifieur de chat, mémoire, formatage) — colocalisés en
+`*.test.ts`. Un workflow **GitHub Actions** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml))
+rejoue `typecheck` + `lint` + `test` + `build` à chaque push/PR sur `main` et `develop`.
 
 ---
 
