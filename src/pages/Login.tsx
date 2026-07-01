@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useAuth } from "../lib/auth";
 
 export default function Login() {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, signInWithGoogle } = useAuth();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -49,6 +49,19 @@ export default function Login() {
     } catch (err) {
       setError((err as Error).message);
     } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onGoogle() {
+    setError(null);
+    setInfo(null);
+    setBusy(true);
+    try {
+      // Redirige vers Google : la page navigue, on ne remet pas busy à false en cas de succès.
+      await signInWithGoogle();
+    } catch (err) {
+      setError((err as Error).message);
       setBusy(false);
     }
   }
@@ -121,6 +134,21 @@ export default function Login() {
             {busy ? "…" : mode === "signin" ? "Se connecter" : "Créer le compte"}
           </button>
         </form>
+
+        <div className="my-4 flex items-center gap-3 text-xs text-neutral-400">
+          <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-700" />
+          ou
+          <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-700" />
+        </div>
+
+        <button
+          onClick={onGoogle}
+          disabled={busy}
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
+        >
+          <ion-icon name="logo-google" className="text-base"></ion-icon>
+          Continuer avec Google
+        </button>
 
         <button
           onClick={() => {
