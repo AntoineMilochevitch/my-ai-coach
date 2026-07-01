@@ -72,10 +72,10 @@ my-ai-coach/
 │   │   ├── crypto.ts           # chiffrement AES-256-GCM
 │   │   ├── dates.ts            # dates calendaires dans le fuseau de l'athlète
 │   │   └── supabase.ts         # client service_role + vérification JWT
-│   ├── ai-analyze.mts          # analyse de période
-│   ├── chat.mts                # chat coach (streaming + RAG)
+│   ├── ai-analyze-background.mts     # analyse de période (arrière-plan)
+│   ├── chat-background.mts      # chat coach (arrière-plan + RAG)
 │   ├── name-conversation.mts   # titre de conversation généré par l'IA
-│   ├── nutrition-advice.mts    # conseils nutrition
+│   ├── nutrition-advice-background.mts # conseils nutrition (arrière-plan)
 │   ├── generate-plan-background.mts  # création du plan (macro + détail initial)
 │   ├── adapt-plan-background.mts     # adaptation manuelle du plan
 │   ├── match-plan.mts          # rapprochement séances ↔ activités réalisées
@@ -91,7 +91,7 @@ my-ai-coach/
 │   ├── estimate-nutrition.mts  # estimation des macros d'un repas
 │   ├── scheduled-sync.mts      # cron : sync Garmin horaire
 │   └── scheduled-adapt.mts     # cron : adaptation hebdomadaire des plans
-├── supabase/migrations/        # schéma SQL (0001 → 0010)
+├── supabase/migrations/        # schéma SQL (0001 → 0011)
 ├── netlify.toml                # config de build et redirections SPA
 └── vite.config.ts
 ```
@@ -190,7 +190,7 @@ Scripts disponibles :
 
 ## Base de données
 
-Le schéma est versionné dans `supabase/migrations/` (`0001` → `0010`). Les migrations
+Le schéma est versionné dans `supabase/migrations/` (`0001` → `0011`). Les migrations
 s'appliquent dans l'ordre sur le projet Supabase (SQL Editor ou `supabase db push`).
 Après ajout de colonnes, le cache de schéma PostgREST doit être à jour (rechargement
 automatique, ou « Reload schema » côté Supabase).

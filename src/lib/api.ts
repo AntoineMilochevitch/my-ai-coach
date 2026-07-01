@@ -36,8 +36,9 @@ export const garminSync = (opts?: { activityDays?: number; dailyDays?: number })
     opts ?? {},
   );
 
-export const aiAnalyze = (days?: number) =>
-  post<{ content_md: string; created_at: string }>("ai-analyze", { days });
+// Analyse de coach EN ARRIÈRE-PLAN (202). Le client interroge ai_analyses (scope 'period').
+export const aiAnalyzeBackground = (days?: number) =>
+  post<Record<string, never>>("ai-analyze-background", { days });
 
 export type ChatActionKind =
   | "create_plan"
@@ -132,8 +133,9 @@ export const createWorkout = (spec: Record<string, any>) =>
 export const editWorkout = (date: string, changes: Record<string, any>) =>
   post<{ updated: number }>("edit-workout", { date, changes });
 
-export const nutritionAdvice = (days?: number) =>
-  post<{ content_md: string }>("nutrition-advice", { days });
+// Conseils nutrition EN ARRIÈRE-PLAN (202). Le client interroge ai_analyses (scope 'nutrition').
+export const nutritionAdviceBackground = (days?: number) =>
+  post<Record<string, never>>("nutrition-advice-background", { days });
 
 export const estimateNutrition = (description: string) =>
   post<{

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { supabase } from "../lib/supabase";
 import { listModels, setAiConfig, type AiProvider } from "../lib/api";
 import GarminPanel from "../components/GarminPanel";
+import UsagePanel from "../components/UsagePanel";
 import Layout from "../components/Layout";
 import Spinner from "../components/Spinner";
 
@@ -232,6 +233,9 @@ export default function Profile() {
           {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
           {msg && <p className="mt-3 text-sm text-green-600">{msg}</p>}
         </section>
+
+        {/* Consommation IA */}
+        <UsagePanel />
 
         {/* Garmin */}
         <section className="rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">

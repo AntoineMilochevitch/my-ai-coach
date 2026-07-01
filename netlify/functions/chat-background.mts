@@ -125,7 +125,9 @@ export default async (req: Request): Promise<Response> => {
     const [actsRes, metricsRes, sleepRes, analysisRes, notesRes] = await Promise.all([
       sb
         .from("activities")
-        .select("activity_type, start_time, distance_m, duration_s, avg_hr, avg_pace_s_per_km")
+        .select(
+          "activity_type, start_time, distance_m, duration_s, avg_hr, max_hr, avg_pace_s_per_km, training_load, aerobic_te, anaerobic_te",
+        )
         .eq("user_id", user.id)
         .gte("start_time", since90)
         .order("start_time", { ascending: false })
@@ -195,7 +197,10 @@ export default async (req: Request): Promise<Response> => {
       const km = a.distance_m ? (a.distance_m / 1000).toFixed(1) : "?";
       const min = a.duration_s ? Math.round(a.duration_s / 60) : "?";
       const pace = a.activity_type?.includes("running") ? ` ${fmtPace(a.avg_pace_s_per_km)}` : "";
-      return `- ${d} ${a.activity_type ?? "sport"} ${km} km/${min} min${pace}`;
+      const hr = a.avg_hr ? `, FC moy ${a.avg_hr}${a.max_hr ? `/max ${a.max_hr}` : ""} bpm` : "";
+      const load = a.training_load ? `, charge ${Math.round(a.training_load)}` : "";
+      const te = a.aerobic_te ? `, TE aéro ${a.aerobic_te}${a.anaerobic_te ? `/anaéro ${a.anaerobic_te}` : ""}` : "";
+      return `- ${d} ${a.activity_type ?? "sport"} ${km} km/${min} min${pace}${hr}${load}${te}`;
     });
 
     const notes = notesRes.data ?? [];

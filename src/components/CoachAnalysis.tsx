@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import Markdown from "react-markdown";
 import { supabase } from "../lib/supabase";
-import { aiAnalyze } from "../lib/api";
+import { aiAnalyzeBackground } from "../lib/api";
 import Spinner from "./Spinner";
 
-/** Section « Coach IA » : génère et affiche une analyse Gemini de la période. */
+/** Section « Coach IA » : génère (en arrière-plan) et affiche une analyse de la période. */
 export default function CoachAnalysis({ days }: { days: number }) {
   const [content, setContent] = useState<string | null>(null);
   const [createdAt, setCreatedAt] = useState<string | null>(null);
@@ -15,6 +15,7 @@ export default function CoachAnalysis({ days }: { days: number }) {
     const { data } = await supabase
       .from("ai_analyses")
       .select("content_md, created_at")
+      .eq("scope", "period")
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -22,6 +23,7 @@ export default function CoachAnalysis({ days }: { days: number }) {
       setContent(data.content_md);
       setCreatedAt(data.created_at);
     }
+    return data?.created_at ?? "1970-01-01";
   }, []);
 
   useEffect(() => {
@@ -32,9 +34,37 @@ export default function CoachAnalysis({ days }: { days: number }) {
     setBusy(true);
     setError(null);
     try {
-      const res = await aiAnalyze(days);
-      setContent(res.content_md);
-      setCreatedAt(res.created_at);
+      // L'analyse tourne en arrière-plan (robuste aux limites) : on déclenche puis
+      // on interroge ai_analyses jusqu'à l'apparition du nouveau résultat.
+      const { data: prev } = await supabase
+        .from("ai_analyses")
+        .select("created_at")
+        .eq("scope", "period")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const baseline = prev?.created_at ?? "1970-01-01";
+      await aiAnalyzeBackground(days);
+      const start = Date.now();
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 2500));
+        const { data } = await supabase
+          .from("ai_analyses")
+          .select("content_md, created_at")
+          .eq("scope", "period")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (data && data.created_at > baseline) {
+          setContent(data.content_md);
+          setCreatedAt(data.created_at);
+          break;
+        }
+        if (Date.now() - start > 90000) {
+          setError("L'analyse prend trop de temps. Réessaie dans un moment.");
+          break;
+        }
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
