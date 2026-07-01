@@ -164,7 +164,19 @@ export interface Zones {
   vo2max: number | null;
   hr: { method: string; zones: { n: number; label: string; min: number; max: number }[] } | null;
   pace: { method: string; zones: { label: string; pace: string }[] } | null;
+  garmin: {
+    threshold_pace: string | null;
+    lthr: number | null;
+    hr_max: number | null;
+    has_hr_floors: boolean;
+    fetched_at: string | null;
+  } | null;
 }
 
 // Zones perso (FC + allure), calculées côté serveur depuis les données de l'athlète.
 export const getZones = () => post<Zones | Record<string, never>>("zones", {});
+
+// Récupère les zones depuis Garmin Connect EN ARRIÈRE-PLAN (202). Le client
+// re-interroge ensuite getZones() pour voir la source « Garmin ».
+export const garminZonesRefresh = () =>
+  post<Record<string, never>>("garmin-zones-background", {});

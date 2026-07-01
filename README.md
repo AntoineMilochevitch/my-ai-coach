@@ -92,7 +92,7 @@ my-ai-coach/
 │   ├── estimate-nutrition.mts  # estimation des macros d'un repas
 │   ├── scheduled-sync.mts      # cron : sync Garmin horaire
 │   └── scheduled-adapt.mts     # cron : adaptation hebdomadaire des plans
-├── supabase/migrations/        # schéma SQL (0001 → 0015)
+├── supabase/migrations/        # schéma SQL (0001 → 0016)
 ├── netlify.toml                # config de build et redirections SPA
 └── vite.config.ts
 ```
@@ -191,7 +191,7 @@ Scripts disponibles :
 
 ## Base de données
 
-Le schéma est versionné dans `supabase/migrations/` (`0001` → `0015`). Les migrations
+Le schéma est versionné dans `supabase/migrations/` (`0001` → `0016`). Les migrations
 s'appliquent dans l'ordre sur le projet Supabase (SQL Editor ou `supabase db push`).
 Après ajout de colonnes, le cache de schéma PostgREST doit être à jour (rechargement
 automatique, ou « Reload schema » côté Supabase).

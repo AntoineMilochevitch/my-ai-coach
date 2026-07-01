@@ -21,11 +21,19 @@ export interface PaceZone {
 }
 export interface Zones {
   hr_max: number | null;
-  hr_max_source: string | null; // "mesurée" | "estimée (220 - âge)"
+  hr_max_source: string | null; // "Garmin" | "mesurée" | "estimée (220 - âge)"
   resting_hr: number | null;
   vo2max: number | null;
   hr: { method: string; zones: HrZone[] } | null;
   pace: { method: string; zones: PaceZone[] } | null;
+  // Résumé de ce qui a été récupéré depuis Garmin (null si rien de branché).
+  garmin: {
+    threshold_pace: string | null;
+    lthr: number | null;
+    hr_max: number | null;
+    has_hr_floors: boolean;
+    fetched_at: string | null;
+  } | null;
 }
 
 function fmtPace(secPerKm: number | null): string {
@@ -33,6 +41,11 @@ function fmtPace(secPerKm: number | null): string {
   const m = Math.floor(secPerKm / 60);
   const s = Math.round(secPerKm % 60);
   return `${m}:${String(s).padStart(2, "0")}/km`;
+}
+
+function toNum(v: unknown): number | null {
+  const n = typeof v === "string" ? Number(v) : v;
+  return typeof n === "number" && Number.isFinite(n) && n > 0 ? n : null;
 }
 
 /**
@@ -67,13 +80,23 @@ const PACE_ZONES: { label: string; frac: number }[] = [
   { label: "Vitesse / Répétition", frac: 1.05 },
 ];
 
+// Allures = multiplicateurs de l'allure SEUIL (T, s/km). >1 = plus lent.
+const PACE_FROM_THRESHOLD: { label: string; mult: number }[] = [
+  { label: "Facile / Endurance", mult: 1.2 },
+  { label: "Marathon", mult: 1.06 },
+  { label: "Seuil", mult: 1.0 },
+  { label: "Intervalle (VO2max)", mult: 0.94 },
+  { label: "Vitesse / Répétition", mult: 0.9 },
+];
+
 export async function athleteZones(sb: SupabaseClient, userId: string): Promise<Zones | null> {
-  // Âge (profil).
+  // Âge (profil) + zones récupérées de Garmin (prioritaires si présentes).
   const { data: prof } = await sb
     .from("profiles")
-    .select("birth_date")
+    .select("birth_date, garmin_zones")
     .eq("id", userId)
     .maybeSingle();
+  const gz: any = prof?.garmin_zones ?? null;
   let age: number | null = null;
   if (prof?.birth_date) {
     const b = new Date(`${prof.birth_date}T00:00:00Z`);
@@ -107,11 +130,9 @@ export async function athleteZones(sb: SupabaseClient, userId: string): Promise<
     .order("metric_date", { ascending: false })
     .limit(1)
     .maybeSingle();
-  const restingHr: number | null = dm?.resting_hr ?? null;
-
   // VO2max le plus récent non nul.
-  let vo2max: number | null = dm?.vo2max ?? null;
-  if (vo2max == null) {
+  let vo2maxMetric: number | null = toNum(dm?.vo2max);
+  if (vo2maxMetric == null) {
     const { data: v } = await sb
       .from("daily_metrics")
       .select("vo2max")
@@ -120,40 +141,86 @@ export async function athleteZones(sb: SupabaseClient, userId: string): Promise<
       .order("metric_date", { ascending: false })
       .limit(1)
       .maybeSingle();
-    vo2max = v?.vo2max ?? null;
+    vo2maxMetric = toNum(v?.vo2max);
   }
 
-  const hrMax = measuredMax ?? (age ? 220 - age : null);
-  const hrMaxSource = measuredMax ? "mesurée" : age ? "estimée (220 - âge)" : null;
+  // Valeurs Garmin (prioritaires).
+  const gzHrMax = toNum(gz?.hr_max);
+  const gzThrSpeed = toNum(gz?.threshold_speed_mps); // m/s
+  const gzLthr = toNum(gz?.lthr);
+  const gzFloors: number[] | null =
+    Array.isArray(gz?.hr_floors) && gz.hr_floors.length === 5 && gz.hr_floors.every((x: unknown) => toNum(x))
+      ? gz.hr_floors.map(Number)
+      : null;
 
-  // Zones de FC.
+  const restingHr: number | null = toNum(gz?.resting_hr) ?? toNum(dm?.resting_hr);
+  const vo2max: number | null = toNum(gz?.vo2_running) ?? vo2maxMetric;
+
+  const hrMax = gzHrMax ?? measuredMax ?? (age ? 220 - age : null);
+  const hrMaxSource = gzHrMax
+    ? "Garmin"
+    : measuredMax
+      ? "mesurée"
+      : age
+        ? "estimée (220 - âge)"
+        : null;
+
+  // --- Zones de FC ---
   let hr: Zones["hr"] = null;
-  if (hrMax) {
+  if (gzFloors) {
+    // Bornes EXACTES de la montre.
+    const top = hrMax ?? Math.round(gzFloors[4] * 1.05);
+    hr = {
+      method: `Garmin — montre${gz?.hr_zone_sport ? ` (${gz.hr_zone_sport})` : ""}`,
+      zones: gzFloors.map((lo, i) => ({
+        n: i + 1,
+        label: HR_LABELS[i],
+        min: Math.round(lo),
+        max: i < 4 ? Math.round(gzFloors[i + 1]) : top,
+      })),
+    };
+  } else if (hrMax) {
     const rest = restingHr ?? 0;
     const reserve = hrMax - rest;
-    const zones: HrZone[] = HR_BOUNDS.slice(0, 5).map((lo, i) => ({
-      n: i + 1,
-      label: HR_LABELS[i],
-      min: Math.round(rest + reserve * lo),
-      max: Math.round(rest + reserve * HR_BOUNDS[i + 1]),
-    }));
     hr = {
       method: restingHr ? "Karvonen (réserve de FC)" : "% de la FCmax",
-      zones,
+      zones: HR_BOUNDS.slice(0, 5).map((lo, i) => ({
+        n: i + 1,
+        label: HR_LABELS[i],
+        min: Math.round(rest + reserve * lo),
+        max: Math.round(rest + reserve * HR_BOUNDS[i + 1]),
+      })),
     };
   }
 
-  // Zones d'allure (course) via VDOT.
+  // --- Zones d'allure (course) ---
   let pace: Zones["pace"] = null;
-  if (vo2max && vo2max > 0) {
+  if (gzThrSpeed) {
+    // À partir de l'allure SEUIL de Garmin (la plus "réglo").
+    const t = 1000 / gzThrSpeed; // s/km au seuil
+    pace = {
+      method: `Garmin — seuil ${fmtPace(t)}`,
+      zones: PACE_FROM_THRESHOLD.map((z) => ({ label: z.label, pace: fmtPace(t * z.mult) })),
+    };
+  } else if (vo2max && vo2max > 0) {
     pace = {
       method: `VDOT ≈ ${Math.round(vo2max)}`,
-      zones: PACE_ZONES.map((z) => ({ label: z.label, pace: fmtPace(paceFromVdot(vo2max!, z.frac)) })),
+      zones: PACE_ZONES.map((z) => ({ label: z.label, pace: fmtPace(paceFromVdot(vo2max, z.frac)) })),
     };
   }
 
+  const garmin: Zones["garmin"] = gz
+    ? {
+        threshold_pace: gzThrSpeed ? fmtPace(1000 / gzThrSpeed) : null,
+        lthr: gzLthr,
+        hr_max: gzHrMax,
+        has_hr_floors: !!gzFloors,
+        fetched_at: gz.fetched_at ?? null,
+      }
+    : null;
+
   if (!hr && !pace) return null;
-  return { hr_max: hrMax, hr_max_source: hrMaxSource, resting_hr: restingHr, vo2max, hr, pace };
+  return { hr_max: hrMax, hr_max_source: hrMaxSource, resting_hr: restingHr, vo2max, hr, pace, garmin };
 }
 
 /** Résumé texte compact pour le contexte IA. "" si rien de calculable. */
