@@ -319,7 +319,7 @@ export default function Chat() {
 
   return (
     <Layout>
-      <div className="relative flex w-full flex-1 overflow-hidden">
+      <div className="relative flex min-h-0 w-full flex-1 overflow-hidden">
         {/* Overlay mobile */}
         {sidebarOpen && (
           <div
@@ -332,7 +332,7 @@ export default function Chat() {
         <aside
           className={`${
             sidebarOpen ? "flex" : "hidden"
-          } absolute inset-y-0 left-0 z-20 w-64 flex-col border-r border-neutral-200 bg-white p-3 md:static md:flex dark:border-neutral-800 dark:bg-neutral-950`}
+          } absolute inset-y-0 left-0 z-20 min-h-0 w-64 flex-col border-r border-neutral-200 bg-white p-3 md:static md:flex dark:border-neutral-800 dark:bg-neutral-950`}
         >
           <button
             onClick={newConversation}
@@ -341,7 +341,7 @@ export default function Chat() {
             <ion-icon name="add-outline" className="text-base"></ion-icon>
             Nouvelle conversation
           </button>
-          <ul className="mt-3 flex-1 space-y-1 overflow-y-auto">
+          <ul className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto">
             {conversations.length === 0 && (
               <li className="px-2 py-1 text-xs text-neutral-500">Aucune conversation.</li>
             )}
@@ -374,8 +374,8 @@ export default function Chat() {
         </aside>
 
         {/* Zone de chat : occupe la place restante, contenu centré et borné en largeur */}
-        <main className="flex flex-1 flex-col overflow-hidden">
-          <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col overflow-hidden p-4">
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-hidden p-4">
           <div className="mb-2 flex items-center gap-2">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -387,7 +387,7 @@ export default function Chat() {
             <h1 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">Coach IA</h1>
           </div>
 
-          <div className="flex-1 space-y-4 overflow-y-auto pb-4">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-4">
             {messages.length === 0 && !busy && (
               <p className="mt-8 text-center text-sm text-neutral-500">
                 Pose une question à ton coach : « Comment s'est passée ma semaine ? »,

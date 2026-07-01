@@ -58,7 +58,7 @@ Netlify Functions (service_role, secrets serveur)
 ```
 my-ai-coach/
 ├── src/                         # Frontend React (SPA)
-│   ├── pages/                   # Dashboard, Chat, Plan, Nutrition, Profile, Login
+│   ├── pages/                   # Dashboard, Chat, Plan, Planning, Nutrition, Profile, Login
 │   ├── components/              # Layout, Charts, GarminPanel, CoachAnalysis, Notes, …
 │   └── lib/                     # client Supabase, auth, appels API, types, formatage
 ├── netlify/functions/          # Endpoints serverless

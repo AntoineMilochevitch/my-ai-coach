@@ -10,6 +10,7 @@ export default function CoachAnalysis({ days }: { days: number }) {
   const [createdAt, setCreatedAt] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
 
   const loadLatest = useCallback(async () => {
     const { data } = await supabase
@@ -33,6 +34,7 @@ export default function CoachAnalysis({ days }: { days: number }) {
   async function generate() {
     setBusy(true);
     setError(null);
+    setCollapsed(false);
     try {
       // L'analyse tourne en arrière-plan (robuste aux limites) : on déclenche puis
       // on interroge ai_analyses jusqu'à l'apparition du nouveau résultat.
@@ -75,14 +77,24 @@ export default function CoachAnalysis({ days }: { days: number }) {
   return (
     <section className="rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="font-medium text-neutral-900 dark:text-neutral-100">Coach IA</h2>
-          {createdAt && (
-            <p className="text-xs text-neutral-500">
-              Dernière analyse : {new Date(createdAt).toLocaleString("fr-FR")}
-            </p>
-          )}
-        </div>
+        <button
+          onClick={() => setCollapsed((c) => !c)}
+          className="flex items-center gap-2 text-left"
+          aria-expanded={!collapsed}
+        >
+          <ion-icon
+            name={collapsed ? "chevron-forward-outline" : "chevron-down-outline"}
+            className="text-neutral-400"
+          ></ion-icon>
+          <span>
+            <span className="block font-medium text-neutral-900 dark:text-neutral-100">Coach IA</span>
+            {createdAt && (
+              <span className="block text-xs text-neutral-500">
+                Dernière analyse : {new Date(createdAt).toLocaleString("fr-FR")}
+              </span>
+            )}
+          </span>
+        </button>
         <button
           onClick={generate}
           disabled={busy}
@@ -100,24 +112,28 @@ export default function CoachAnalysis({ days }: { days: number }) {
         </button>
       </div>
 
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {!collapsed && (
+        <>
+          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
-      <div className="mt-4">
-        {busy ? (
-          <p className="flex items-center gap-2 text-sm text-neutral-500">
-            <Spinner /> Le coach analyse tes données…
-          </p>
-        ) : content ? (
-          <div className="markdown text-neutral-700 dark:text-neutral-300">
-            <Markdown>{content}</Markdown>
+          <div className="mt-4">
+            {busy ? (
+              <p className="flex items-center gap-2 text-sm text-neutral-500">
+                <Spinner /> Le coach analyse tes données…
+              </p>
+            ) : content ? (
+              <div className="markdown text-neutral-700 dark:text-neutral-300">
+                <Markdown>{content}</Markdown>
+              </div>
+            ) : (
+              <p className="text-sm text-neutral-500">
+                Aucune analyse pour l'instant. Clique sur « Générer une analyse » pour que le
+                coach étudie tes données récentes.
+              </p>
+            )}
           </div>
-        ) : (
-          <p className="text-sm text-neutral-500">
-            Aucune analyse pour l'instant. Clique sur « Générer une analyse » pour que le
-            coach étudie tes données récentes.
-          </p>
-        )}
-      </div>
+        </>
+      )}
     </section>
   );
 }

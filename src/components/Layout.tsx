@@ -38,6 +38,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           dot={dot}
           onChat={() => navigate("/chat")}
           onPlan={() => navigate("/plan")}
+          onPlanning={() => navigate("/planning")}
           onNutrition={() => navigate("/nutrition")}
           onProfile={() => navigate("/profile")}
           onSignOut={signOut}

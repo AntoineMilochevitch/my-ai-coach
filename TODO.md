@@ -6,7 +6,7 @@
 
 - [ ] **Tutoriel interactif** — parcours guidé à la première connexion : présentation du site, connexion à Garmin, mise en place de la clé API IA et choix du modèle, première synchronisation, génération d'un plan.
 
-- [ ] **Onglet Planning** — vue calendrier dédiée des séances (semaine / mois), distincte de la liste du plan.
+- [x] **Onglet Planning** — vue calendrier dédiée des séances (semaine / mois), distincte de la liste du plan. *(Fait : page `/planning`, vues semaine/mois, clic sur une séance → modale de détail (étapes, cible, envoi Garmin, marquer faite).)*
 
 - [x] **Création d'activité depuis le chat** - le coach peut créer des activités depuis le chat, qu'on peut directement envoyé à la montre. *(Fait : action `create_workout` → étapes générées par IA + envoi Garmin ; et `edit_workout` pour modifier une séance précise du plan. Endpoints `create-workout` / `edit-workout`.)*
 
