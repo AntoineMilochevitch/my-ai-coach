@@ -25,10 +25,11 @@
 ## Roadmap améliorations (ordre de réalisation)
 
 - [x] **1. Coach proactif** — le coach vient à toi : message/bilan automatique (dernière séance commentée, alerte si signal, 1 conseil) sur le Dashboard, généré avec parcimonie (seulement si périmé). Inclut l'**analyse auto post-séance** et la **carte « Message du coach »**. *(Fait : `coach-insight-background` (court, 1 appel) + table `coach_insights` (0015) + carte `CoachInsight` en haut du Dashboard, auto-générée seulement si ≥ 20 h et données présentes, + bouton Actualiser.)*
-- [ ] **2. Zones perso FC & allure** — récupérer les zones depuis Garmin (ou les calculer) et les utiliser dans les séances + les afficher.
+- [x] **2. Zones perso FC & allure** — zones calculées à partir des données de l'athlète (FCmax mesurée sur les activités ou 220−âge, FC repos, VO₂max) : zones FC par Karvonen (`_shared/zones.ts`) + allures course par VDOT/Daniels ; endpoint `zones` + carte « Mes zones » sur le Dashboard ; injectées dans le contexte IA (plan, chat, coach proactif) pour calibrer les séances. *(Pas de dépendance à un endpoint Garmin : dérivé des données déjà synchronisées.)*
 - [ ] **3. Détection de surcharge** — ratio charge aiguë/chronique (ACWR) + tendances récup → alerte (alimente le coach proactif).
 - [ ] **4. Prédiction de performance** — estimer des chronos réalistes (VDOT) et aider à fixer l'objectif.
 - [ ] **5. Mémoire du coach** — profil athlète persistant (objectifs, blessures, préférences) que le coach met à jour et réutilise entre conversations.
 - [ ] **6. Graphes de récupération** — HRV, readiness, sommeil, charge, poids sur le Dashboard.
 - [ ] **7. Page détail d'activité** — clic sur une activité → détail complet (splits, FC, TE) + journal ressenti/ravito.
 - [ ] **8. Thème clair / sombre** — toggle dédié (au lieu de suivre le système).
+- [ ] **Utilisation de Resend**

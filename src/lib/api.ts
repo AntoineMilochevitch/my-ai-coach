@@ -156,3 +156,15 @@ export const estimateNutrition = (description: string) =>
 
 export const nameConversation = (conversationId: string) =>
   post<{ title: string }>("name-conversation", { conversationId });
+
+export interface Zones {
+  hr_max: number | null;
+  hr_max_source: string | null;
+  resting_hr: number | null;
+  vo2max: number | null;
+  hr: { method: string; zones: { n: number; label: string; min: number; max: number }[] } | null;
+  pace: { method: string; zones: { label: string; pace: string }[] } | null;
+}
+
+// Zones perso (FC + allure), calculées côté serveur depuis les données de l'athlète.
+export const getZones = () => post<Zones | Record<string, never>>("zones", {});

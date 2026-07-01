@@ -42,6 +42,11 @@ Chaque semaine : footings faciles, UNE sortie longue, AU MOINS UNE séance de qu
 de l'objectif. jour = entier 1..7 (1=lundi … 7=dimanche). type ∈ {easy, long, tempo,
 interval, recovery, rest, cross, strength}.
 
+# ZONES PERSO (si "zones" fourni dans le contexte)
+Cale les allures cibles et les hrZone sur les ZONES PERSONNELLES de l'athlète (FC et allures
+issues de sa FCmax/VO2max réelles) : footing en zone Facile/Endurance, tempo au Seuil,
+intervalles en zone Intervalle/VO2max. N'invente pas d'allures incohérentes avec ces zones.
+
 # ÉTAPES ("steps") cohérentes avec la description
 - kind = "step" (étape simple) ou "repeat" (bloc répété).
 - step simple : type ∈ {warmup, run, interval, recovery, cooldown}, endType ∈ {time, distance, lap},

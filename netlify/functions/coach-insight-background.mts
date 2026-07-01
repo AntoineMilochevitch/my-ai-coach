@@ -96,6 +96,7 @@ export default async (req: Request): Promise<Response> => {
 
     const athlete = {
       profil: context.profil,
+      zones: context.zones,
       objectif: plan?.goal ?? null,
       derniere_seance: derniereSeance,
       recuperation: context.recuperation,
