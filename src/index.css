@@ -1,8 +1,7 @@
 @import "tailwindcss";
 
-:root {
-  color-scheme: light dark;
-}
+/* Mode sombre piloté par la classe `.dark` (toggle manuel), pas seulement le média système. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 html,
 body,

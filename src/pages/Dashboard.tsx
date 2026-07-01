@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import Layout from "../components/Layout";
 import Spinner from "../components/Spinner";
@@ -25,6 +26,7 @@ type RangeKey = (typeof RANGES)[number]["key"];
 const prettySport = (s: string) => s.replaceAll("_", " ");
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [vo2max, setVo2max] = useState<number | null>(null);
   const [vo2Source, setVo2Source] = useState<string | null>(null);
@@ -239,7 +241,8 @@ export default function Dashboard() {
                     return (
                       <tr
                         key={a.id}
-                        className="border-t border-neutral-100 dark:border-neutral-800"
+                        onClick={() => navigate(`/activity/${a.id}`)}
+                        className="cursor-pointer border-t border-neutral-100 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800/40"
                       >
                         <td className="py-2 pr-4">
                           {a.start_time
@@ -259,7 +262,10 @@ export default function Dashboard() {
                         <td className="py-2 pr-4">{a.avg_hr ?? "—"}</td>
                         <td className="py-2 text-right">
                           <button
-                            onClick={() => setLogActivity(a)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setLogActivity(a);
+                            }}
                             title={hasLog ? "Modifier le ressenti / ravitaillement" : "Ajouter ressenti / ravitaillement"}
                             className={`inline-flex items-center gap-1 text-xs ${hasLog ? "text-green-600" : "text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"}`}
                           >

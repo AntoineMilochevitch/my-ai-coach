@@ -7,6 +7,7 @@ import Profile from "./pages/Profile";
 import Plan from "./pages/Plan";
 import Planning from "./pages/Planning";
 import Nutrition from "./pages/Nutrition";
+import ActivityDetail from "./pages/ActivityDetail";
 
 export default function App() {
   const { session, loading } = useAuth();
@@ -48,6 +49,10 @@ export default function App() {
       <Route
         path="/nutrition"
         element={session ? <Nutrition /> : <Navigate to="/login" replace />}
+      />
+      <Route
+        path="/activity/:id"
+        element={session ? <ActivityDetail /> : <Navigate to="/login" replace />}
       />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
