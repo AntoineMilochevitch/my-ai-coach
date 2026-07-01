@@ -10,6 +10,7 @@ import {
   adaptPlan,
   createWorkout,
   editWorkout,
+  nutritionPlanBackground,
   type ChatAction,
 } from "../lib/api";
 import Layout from "../components/Layout";
@@ -30,6 +31,7 @@ const ACTION_LABEL: Record<string, string> = {
   add_note: "Ajouter une note",
   create_workout: "Créer et envoyer une séance sur Garmin",
   edit_workout: "Modifier une séance du plan",
+  nutrition_plan: "Plan nutrition recommandé",
 };
 const ACTION_ICON: Record<string, string> = {
   create_plan: "calendar-outline",
@@ -38,6 +40,7 @@ const ACTION_ICON: Record<string, string> = {
   add_note: "document-text-outline",
   create_workout: "watch-outline",
   edit_workout: "create-outline",
+  nutrition_plan: "nutrition-outline",
 };
 const today = () => new Date().toISOString().slice(0, 10);
 interface Conversation {
@@ -271,6 +274,8 @@ export default function Chat() {
         await createWorkout(a.args);
       } else if (a.kind === "edit_workout") {
         await editWorkout(String(a.args.date || ""), a.args);
+      } else if (a.kind === "nutrition_plan") {
+        await nutritionPlanBackground(a.args.constraints as string | undefined);
       }
       await setActionStatus(m, "applied");
     } catch (err) {
@@ -455,7 +460,8 @@ export default function Chat() {
                                   m.action.kind === "edit_workout") && (
                                   <Link to="/plan" className="underline">— voir le plan</Link>
                                 )}
-                                {m.action.kind === "add_nutrition" && (
+                                {(m.action.kind === "add_nutrition" ||
+                                  m.action.kind === "nutrition_plan") && (
                                   <Link to="/nutrition" className="underline">— voir la nutrition</Link>
                                 )}
                               </p>

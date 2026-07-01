@@ -122,7 +122,7 @@ export default async (req: Request): Promise<Response> => {
 
     // --- Contexte athlète (scopé au user) ---
     const since90 = new Date(Date.now() - 90 * 86400000).toISOString();
-    const [actsRes, metricsRes, sleepRes, analysisRes, notesRes] = await Promise.all([
+    const [actsRes, metricsRes, sleepRes, analysisRes, notesRes, nplanRes] = await Promise.all([
       sb
         .from("activities")
         .select(
@@ -158,6 +158,7 @@ export default async (req: Request): Promise<Response> => {
         .eq("user_id", user.id)
         .order("note_date", { ascending: false })
         .limit(5),
+      sb.from("nutrition_plans").select("content").eq("user_id", user.id).maybeSingle(),
     ]);
 
     const acts = actsRes.data ?? [];
@@ -208,6 +209,22 @@ export default async (req: Request): Promise<Response> => {
       ? "\n## Notes de l'athlète\n" +
         notes.map((n) => `- ${n.note_date} : ${String(n.content).slice(0, 300)}`).join("\n")
       : "";
+
+    // Plan nutrition recommandé (pour donner des recettes / discuter / ajuster).
+    const np: any = nplanRes.data?.content;
+    const nutritionPlanText =
+      np && !np.error
+        ? "\n## Plan nutrition recommandé\n" +
+          (np.resume ? `${np.resume}\n` : "") +
+          (Array.isArray(np.repas)
+            ? np.repas
+                .map(
+                  (r: any) =>
+                    `- ${r.nom} : ${r.kcal ?? "?"} kcal (${r.prot_g ?? "?"}P/${r.gluc_g ?? "?"}G/${r.lip_g ?? "?"}L)${r.idee ? ` — ${r.idee}` : ""}`,
+                )
+                .join("\n")
+            : "")
+        : "";
 
     // --- Plan d'entraînement actif ---
     let planText = "";
@@ -286,6 +303,7 @@ export default async (req: Request): Promise<Response> => {
         : "",
       notesText,
       planText,
+      nutritionPlanText,
       ragText,
     ]
       .filter(Boolean)

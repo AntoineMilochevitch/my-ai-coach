@@ -46,7 +46,8 @@ export type ChatActionKind =
   | "add_nutrition"
   | "add_note"
   | "create_workout"
-  | "edit_workout";
+  | "edit_workout"
+  | "nutrition_plan";
 export interface ChatAction {
   kind: ChatActionKind;
   args: Record<string, any>;
@@ -136,6 +137,10 @@ export const editWorkout = (date: string, changes: Record<string, any>) =>
 // Conseils nutrition EN ARRIÈRE-PLAN (202). Le client interroge ai_analyses (scope 'nutrition').
 export const nutritionAdviceBackground = (days?: number) =>
   post<Record<string, never>>("nutrition-advice-background", { days });
+
+// Plan nutrition (repas recommandés) EN ARRIÈRE-PLAN (202). Le client interroge nutrition_plans.
+export const nutritionPlanBackground = (constraints?: string) =>
+  post<Record<string, never>>("nutrition-plan-background", { constraints });
 
 export const estimateNutrition = (description: string) =>
   post<{
