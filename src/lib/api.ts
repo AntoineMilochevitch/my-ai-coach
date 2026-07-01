@@ -194,3 +194,19 @@ export interface LoadBalance {
 // Équilibre de charge (ACWR), calculé côté serveur depuis training_load.
 export const getTrainingLoad = () =>
   post<LoadBalance | Record<string, never>>("training-load", {});
+
+export interface RacePrediction {
+  label: string;
+  distance_m: number;
+  time_s: number;
+  pace_s_per_km: number;
+}
+export interface Predictions {
+  vdot: number;
+  source: string;
+  races: RacePrediction[];
+}
+
+// Prédictions de chronos (VDOT), calculées côté serveur.
+export const getRacePredictions = () =>
+  post<Predictions | Record<string, never>>("race-predictions", {});

@@ -91,16 +91,17 @@ const PACE_ZONES: { label: string; frac: number }[] = [
   { label: "Marathon", frac: 0.8 },
   { label: "Seuil", frac: 0.87 },
   { label: "Intervalle (VO2max)", frac: 0.97 },
-  { label: "Vitesse / Répétition", frac: 1.05 },
+  { label: "Vitesse / Sprint", frac: 1.05 },
 ];
 
 // Allures = multiplicateurs de l'allure SEUIL (T, s/km). >1 = plus lent.
+// Calibrés sur des repères réels (seuil 4:25 → facile ~5:30, intervalle ~3:40, sprint ~2:55).
 const PACE_FROM_THRESHOLD: { label: string; mult: number }[] = [
-  { label: "Facile / Endurance", mult: 1.2 },
-  { label: "Marathon", mult: 1.06 },
+  { label: "Facile / Endurance", mult: 1.25 },
+  { label: "Marathon", mult: 1.09 },
   { label: "Seuil", mult: 1.0 },
-  { label: "Intervalle (VO2max)", mult: 0.94 },
-  { label: "Vitesse / Répétition", mult: 0.9 },
+  { label: "Intervalle (VO2max)", mult: 0.83 },
+  { label: "Vitesse / Sprint", mult: 0.66 },
 ];
 
 export async function athleteZones(sb: SupabaseClient, userId: string): Promise<Zones | null> {

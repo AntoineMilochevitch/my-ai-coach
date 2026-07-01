@@ -6,6 +6,7 @@ import CoachAnalysis from "../components/CoachAnalysis";
 import CoachInsight from "../components/CoachInsight";
 import MyZones from "../components/MyZones";
 import TrainingLoad from "../components/TrainingLoad";
+import RacePredictions from "../components/RacePredictions";
 import Notes from "../components/Notes";
 import ActivityLogModal, { type ActivityLog } from "../components/ActivityLogModal";
 import Onboarding from "../components/Onboarding";
@@ -186,9 +187,10 @@ export default function Dashboard() {
           />
         </section>
 
-        {/* Charge d'entraînement (ACWR) + Zones perso (FC & allure) */}
+        {/* Charge d'entraînement (ACWR) + Zones perso + Prédictions */}
         <TrainingLoad />
         <MyZones />
+        <RacePredictions />
 
         {/* Coach IA */}
         <CoachAnalysis days={Math.min(range.days, 120)} />
