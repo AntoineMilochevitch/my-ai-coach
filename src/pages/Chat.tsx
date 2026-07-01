@@ -375,8 +375,9 @@ export default function Chat() {
 
         {/* Zone de chat : occupe la place restante, contenu centré et borné en largeur */}
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-hidden p-4">
-          <div className="mb-2 flex items-center gap-2">
+          {/* En-tête (centré) */}
+          <div className="mx-auto w-full max-w-3xl px-4 pt-3">
+            <div className="mb-2 flex items-center gap-2">
             <button
               onClick={() => setSidebarOpen(true)}
               className="rounded-lg border border-neutral-300 p-1.5 text-neutral-600 md:hidden dark:border-neutral-700 dark:text-neutral-300"
@@ -385,9 +386,12 @@ export default function Chat() {
               <ion-icon name="menu-outline" className="text-base"></ion-icon>
             </button>
             <h1 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">Coach IA</h1>
+            </div>
           </div>
 
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-4">
+          {/* Messages : zone scrollable PLEINE LARGEUR (barre à droite), contenu centré */}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="mx-auto w-full max-w-3xl space-y-4 px-4 pb-4">
             {messages.length === 0 && !busy && (
               <p className="mt-8 text-center text-sm text-neutral-500">
                 Pose une question à ton coach : « Comment s'est passée ma semaine ? »,
@@ -489,8 +493,11 @@ export default function Chat() {
               </div>
             )}
             <div ref={endRef} />
+            </div>
           </div>
 
+          {/* Bas (centré) */}
+          <div className="mx-auto w-full max-w-3xl px-4 pb-4">
           {error && <p className="pb-2 text-sm text-red-600">{error}</p>}
 
           <form onSubmit={onSubmit} className="flex gap-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
