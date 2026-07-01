@@ -15,6 +15,7 @@ import { embed } from "./_shared/embeddings.ts";
 import { loadAiConfig } from "./_shared/ai-config.ts";
 import { checkQuota, recordUsage } from "./_shared/usage.ts";
 import { mightBeAction, detectAction } from "./_shared/chat-actions.ts";
+import { loadPhysio, physioLine } from "./_shared/physio.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const SYSTEM_BASE = `Tu es le coach sportif personnel de cet athlète (course/vélo/fitness).
@@ -317,8 +318,11 @@ export default async (req: Request): Promise<Response> => {
       }
     }
 
+    const physioText = physioLine(await loadPhysio(sb, user.id));
+
     const context = [
       "# CONTEXTE ATHLÈTE",
+      physioText ? `## Profil\n${physioText}` : "",
       "## Par sport (90 derniers jours)",
       sportLines.length ? sportLines.join("\n") : "- aucune activité récente",
       "## Indicateurs récents",

@@ -7,6 +7,7 @@
  *  - réalisé vs cible des séances du plan (allures tenues, séances faites/ratées).
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { loadPhysio, type Physio } from "./physio.ts";
 
 function fmtPace(sPerKm: number | null | undefined): string | null {
   if (!sPerKm || sPerKm <= 0) return null;
@@ -14,6 +15,7 @@ function fmtPace(sPerKm: number | null | undefined): string | null {
 }
 
 export interface AthleteContext {
+  profil: Physio | null;
   activites_recentes: any[];
   recuperation: {
     indicateurs_recents: any[];
@@ -158,7 +160,10 @@ export async function buildAthleteContext(
     }
   }
 
+  const profil = await loadPhysio(sb, userId);
+
   return {
+    profil,
     activites_recentes,
     recuperation: {
       indicateurs_recents: metricsRes.data ?? [],
