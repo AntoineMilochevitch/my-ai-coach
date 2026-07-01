@@ -180,3 +180,17 @@ export const getZones = () => post<Zones | Record<string, never>>("zones", {});
 // re-interroge ensuite getZones() pour voir la source « Garmin ».
 export const garminZonesRefresh = () =>
   post<Record<string, never>>("garmin-zones-background", {});
+
+export type LoadStatus = "detraining" | "optimal" | "high" | "very_high";
+export interface LoadBalance {
+  acute_7d: number;
+  chronic_weekly: number;
+  acwr: number | null;
+  status: LoadStatus | null;
+  weekly: { start: string; load: number }[];
+  trend_pct: number | null;
+}
+
+// Équilibre de charge (ACWR), calculé côté serveur depuis training_load.
+export const getTrainingLoad = () =>
+  post<LoadBalance | Record<string, never>>("training-load", {});

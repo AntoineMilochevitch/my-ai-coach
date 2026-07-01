@@ -17,6 +17,7 @@ import { checkQuota, recordUsage } from "./_shared/usage.ts";
 import { mightBeAction, detectAction } from "./_shared/chat-actions.ts";
 import { loadPhysio, physioLine } from "./_shared/physio.ts";
 import { athleteZones, zonesText } from "./_shared/zones.ts";
+import { trainingLoad, loadText } from "./_shared/training-load.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const SYSTEM_BASE = `Tu es le coach sportif personnel de cet athlète (course/vélo/fitness).
@@ -321,11 +322,13 @@ export default async (req: Request): Promise<Response> => {
 
     const physioText = physioLine(await loadPhysio(sb, user.id));
     const zText = zonesText(await athleteZones(sb, user.id));
+    const cText = loadText(await trainingLoad(sb, user.id));
 
     const context = [
       "# CONTEXTE ATHLÈTE",
       physioText ? `## Profil\n${physioText}` : "",
       zText ? `## Zones perso\n${zText}` : "",
+      cText ? `## Charge d'entraînement\n${cText}` : "",
       "## Par sport (90 derniers jours)",
       sportLines.length ? sportLines.join("\n") : "- aucune activité récente",
       "## Indicateurs récents",

@@ -11,6 +11,7 @@ import { getLlm, isRateLimit } from "./_shared/llm/index.ts";
 import { loadAiConfig } from "./_shared/ai-config.ts";
 import { recordUsage } from "./_shared/usage.ts";
 import { buildAthleteContext } from "./_shared/plan-context.ts";
+import { loadText } from "./_shared/training-load.ts";
 
 const SYSTEM = `Tu es le coach sportif personnel de cet athlète (course/vélo/fitness). Écris un
 COURT message PROACTIF du jour (Markdown, ≤ 120 mots), comme si tu lui parlais maintenant :
@@ -97,6 +98,8 @@ export default async (req: Request): Promise<Response> => {
     const athlete = {
       profil: context.profil,
       zones: context.zones,
+      charge: context.charge,
+      charge_resume: loadText(context.charge) || null,
       objectif: plan?.goal ?? null,
       derniere_seance: derniereSeance,
       recuperation: context.recuperation,

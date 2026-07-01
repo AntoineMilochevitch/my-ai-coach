@@ -5,6 +5,7 @@ import Spinner from "../components/Spinner";
 import CoachAnalysis from "../components/CoachAnalysis";
 import CoachInsight from "../components/CoachInsight";
 import MyZones from "../components/MyZones";
+import TrainingLoad from "../components/TrainingLoad";
 import Notes from "../components/Notes";
 import ActivityLogModal, { type ActivityLog } from "../components/ActivityLogModal";
 import Onboarding from "../components/Onboarding";
@@ -185,7 +186,8 @@ export default function Dashboard() {
           />
         </section>
 
-        {/* Zones perso (FC & allure) */}
+        {/* Charge d'entraînement (ACWR) + Zones perso (FC & allure) */}
+        <TrainingLoad />
         <MyZones />
 
         {/* Coach IA */}

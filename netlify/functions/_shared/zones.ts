@@ -52,6 +52,20 @@ function toNum(v: unknown): number | null {
  * Allure (s/km) pour une fraction `frac` de la VO2max, via la relation vitesse↔VO2
  * de Daniels : VO2 = -4.60 + 0.182258·v + 0.000104·v²  (v en m/min).
  */
+/**
+ * Ramène une "vitesse seuil" Garmin à des m/s plausibles pour de la course.
+ * Garmin renvoie parfois des unités surprenantes (m/s attendu, mais on a observé
+ * un facteur 10, et km/h est possible). On teste des interprétations et on garde
+ * la première qui tombe dans une plage de course réaliste (~1,4–7 m/s ≈ 2:23–11:54/km).
+ * Renvoie null si aucune interprétation n'est crédible (→ repli VDOT).
+ */
+function plausibleRunSpeedMps(raw: number): number | null {
+  for (const spd of [raw, raw * 10, raw / 3.6, raw * 3.6, raw / 10]) {
+    if (spd >= 1.4 && spd <= 7.0) return spd;
+  }
+  return null;
+}
+
 function paceFromVdot(vdot: number, frac: number): number | null {
   const targetVo2 = frac * vdot;
   const a = 0.000104;
@@ -146,7 +160,8 @@ export async function athleteZones(sb: SupabaseClient, userId: string): Promise<
 
   // Valeurs Garmin (prioritaires).
   const gzHrMax = toNum(gz?.hr_max);
-  const gzThrSpeed = toNum(gz?.threshold_speed_mps); // m/s
+  const gzThrSpeedRaw = toNum(gz?.threshold_speed_mps);
+  const gzThrSpeed = gzThrSpeedRaw ? plausibleRunSpeedMps(gzThrSpeedRaw) : null; // m/s normalisé
   const gzLthr = toNum(gz?.lthr);
   const gzFloors: number[] | null =
     Array.isArray(gz?.hr_floors) && gz.hr_floors.length === 5 && gz.hr_floors.every((x: unknown) => toNum(x))

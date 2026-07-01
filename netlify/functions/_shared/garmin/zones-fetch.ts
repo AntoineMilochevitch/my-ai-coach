@@ -64,12 +64,14 @@ export async function fetchGarminZones(accessToken: string): Promise<GarminZones
   let hrFloors: number[] | null = null;
   let hrZoneMax: number | null = null;
   let hrZoneSport: string | null = null;
+  let hrZoneRest: number | null = null;
   if (Array.isArray(hrZonesRaw) && hrZonesRaw.length) {
     const z =
       hrZonesRaw.find((x: any) => x?.sport === "RUNNING") ??
       hrZonesRaw.find((x: any) => x?.sport === "DEFAULT") ??
       hrZonesRaw[0];
     if (z) {
+      hrZoneRest = num(z.restingHeartRateUsed);
       const f = [z.zone1Floor, z.zone2Floor, z.zone3Floor, z.zone4Floor, z.zone5Floor].map(num);
       if (f.every((x) => x != null)) {
         hrFloors = f as number[];
@@ -81,7 +83,7 @@ export async function fetchGarminZones(accessToken: string): Promise<GarminZones
 
   return {
     hr_max: hrZoneMax ?? hrMaxSettings,
-    resting_hr: restHr,
+    resting_hr: restHr ?? hrZoneRest,
     lthr,
     threshold_speed_mps: thrSpeed,
     vo2_running: vo2Run,
