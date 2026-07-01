@@ -7,6 +7,7 @@ import CoachInsight from "../components/CoachInsight";
 import MyZones from "../components/MyZones";
 import TrainingLoad from "../components/TrainingLoad";
 import RacePredictions from "../components/RacePredictions";
+import RecoveryCharts from "../components/RecoveryCharts";
 import Notes from "../components/Notes";
 import ActivityLogModal, { type ActivityLog } from "../components/ActivityLogModal";
 import Onboarding from "../components/Onboarding";
@@ -197,6 +198,9 @@ export default function Dashboard() {
 
         {/* Notes libres (alimentent le coach IA) */}
         <Notes />
+
+        {/* Récupération (HRV, readiness, FC repos, sommeil) */}
+        <RecoveryCharts />
 
         {/* Graphes */}
         <section className="grid gap-4 lg:grid-cols-2">
