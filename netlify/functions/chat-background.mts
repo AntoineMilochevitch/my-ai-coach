@@ -15,6 +15,7 @@ import { embed } from "./_shared/embeddings.ts";
 import { loadAiConfig } from "./_shared/ai-config.ts";
 import { checkQuota, recordUsage } from "./_shared/usage.ts";
 import { mightBeAction, detectAction } from "./_shared/chat-actions.ts";
+import { loadPhysio, physioLine } from "./_shared/physio.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const SYSTEM_BASE = `Tu es le coach sportif personnel de cet athlète (course/vélo/fitness).
@@ -122,7 +123,8 @@ export default async (req: Request): Promise<Response> => {
 
     // --- Contexte athlète (scopé au user) ---
     const since90 = new Date(Date.now() - 90 * 86400000).toISOString();
-    const [actsRes, metricsRes, sleepRes, analysisRes, notesRes] = await Promise.all([
+    const [actsRes, metricsRes, sleepRes, analysisRes, notesRes, nplanRes, alogsRes] =
+      await Promise.all([
       sb
         .from("activities")
         .select(
@@ -158,6 +160,15 @@ export default async (req: Request): Promise<Response> => {
         .eq("user_id", user.id)
         .order("note_date", { ascending: false })
         .limit(5),
+      sb.from("nutrition_plans").select("content").eq("user_id", user.id).maybeSingle(),
+      sb
+        .from("activity_logs")
+        .select(
+          "ressenti, fueled, intake, carbs_g, fluids_ml, calories, activities(start_time, activity_type, distance_m)",
+        )
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(8),
     ]);
 
     const acts = actsRes.data ?? [];
@@ -207,6 +218,43 @@ export default async (req: Request): Promise<Response> => {
     const notesText = notes.length
       ? "\n## Notes de l'athlète\n" +
         notes.map((n) => `- ${n.note_date} : ${String(n.content).slice(0, 300)}`).join("\n")
+      : "";
+
+    // Plan nutrition recommandé (pour donner des recettes / discuter / ajuster).
+    const np: any = nplanRes.data?.content;
+    const nutritionPlanText =
+      np && !np.error
+        ? "\n## Plan nutrition recommandé\n" +
+          (np.resume ? `${np.resume}\n` : "") +
+          (Array.isArray(np.repas)
+            ? np.repas
+                .map(
+                  (r: any) =>
+                    `- ${r.nom} : ${r.kcal ?? "?"} kcal (${r.prot_g ?? "?"}P/${r.gluc_g ?? "?"}G/${r.lip_g ?? "?"}L)${r.idee ? ` — ${r.idee}` : ""}`,
+                )
+                .join("\n")
+            : "")
+        : "";
+
+    // Journaux post-activité (ressenti + ravitaillement pendant/autour).
+    const alogs = alogsRes.data ?? [];
+    const logsText = alogs.length
+      ? "\n## Journaux d'activité (ressenti & ravitaillement)\n" +
+        alogs
+          .map((l: any) => {
+            const a = Array.isArray(l.activities) ? l.activities[0] : l.activities;
+            const d = a?.start_time ? String(a.start_time).slice(0, 10) : "?";
+            const km = a?.distance_m ? (a.distance_m / 1000).toFixed(1) : "?";
+            const fuel = l.fueled
+              ? `, ravito : ${l.intake ?? "?"}${
+                  l.carbs_g || l.fluids_ml
+                    ? ` (${l.carbs_g ? `${l.carbs_g} g gluc` : ""}${l.carbs_g && l.fluids_ml ? ", " : ""}${l.fluids_ml ? `${l.fluids_ml} ml` : ""})`
+                    : ""
+                }`
+              : "";
+            return `- ${d} ${a?.activity_type ?? "activité"} ${km} km : ${l.ressenti ?? "(pas de ressenti)"}${fuel}`;
+          })
+          .join("\n")
       : "";
 
     // --- Plan d'entraînement actif ---
@@ -270,8 +318,11 @@ export default async (req: Request): Promise<Response> => {
       }
     }
 
+    const physioText = physioLine(await loadPhysio(sb, user.id));
+
     const context = [
       "# CONTEXTE ATHLÈTE",
+      physioText ? `## Profil\n${physioText}` : "",
       "## Par sport (90 derniers jours)",
       sportLines.length ? sportLines.join("\n") : "- aucune activité récente",
       "## Indicateurs récents",
@@ -285,7 +336,9 @@ export default async (req: Request): Promise<Response> => {
         ? `\n## Dernière analyse du coach (extrait)\n${analysisRes.data.content_md.slice(0, 700)}`
         : "",
       notesText,
+      logsText,
       planText,
+      nutritionPlanText,
       ragText,
     ]
       .filter(Boolean)

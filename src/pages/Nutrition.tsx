@@ -4,7 +4,8 @@ import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import Layout from "../components/Layout";
 import Spinner from "../components/Spinner";
-import { nutritionAdviceBackground, estimateNutrition } from "../lib/api";
+import { nutritionAdviceBackground, nutritionPlanBackground, estimateNutrition } from "../lib/api";
+import NutritionPlan, { type NPlan } from "../components/NutritionPlan";
 
 interface Entry {
   id: string;
@@ -43,6 +44,12 @@ export default function Nutrition() {
   const [advice, setAdvice] = useState<string | null>(null);
   const [adviceBusy, setAdviceBusy] = useState(false);
 
+  // Plan nutrition (repas recommandés)
+  const [nplan, setNplan] = useState<NPlan | null>(null);
+  const [nplanBusy, setNplanBusy] = useState(false);
+  const [nplanConstraints, setNplanConstraints] = useState("");
+  const [nplanInEffort, setNplanInEffort] = useState(false);
+
   const load = useCallback(async (d: string) => {
     const { data, error: e } = await supabase
       .from("nutrition_entries")
@@ -68,6 +75,17 @@ export default function Nutrition() {
       .maybeSingle()
       .then(({ data }) => {
         if (data?.content_md) setAdvice(data.content_md);
+      });
+  }, []);
+
+  // Dernier plan nutrition généré.
+  useEffect(() => {
+    supabase
+      .from("nutrition_plans")
+      .select("content")
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.content) setNplan(data.content as NPlan);
       });
   }, []);
 
@@ -124,6 +142,39 @@ export default function Nutrition() {
       setError((err as Error).message);
     } finally {
       setEstimating(false);
+    }
+  }
+
+  async function generatePlan() {
+    setNplanBusy(true);
+    setError(null);
+    try {
+      const { data: prev } = await supabase
+        .from("nutrition_plans")
+        .select("updated_at")
+        .maybeSingle();
+      const baseline = prev?.updated_at ?? "1970-01-01";
+      await nutritionPlanBackground(nplanConstraints.trim() || undefined, nplanInEffort);
+      const start = Date.now();
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 2500));
+        const { data } = await supabase
+          .from("nutrition_plans")
+          .select("content, updated_at")
+          .maybeSingle();
+        if (data && data.updated_at > baseline) {
+          setNplan(data.content as NPlan);
+          break;
+        }
+        if (Date.now() - start > 160000) {
+          setError("Le plan nutrition prend trop de temps. Réessaie dans un moment.");
+          break;
+        }
+      }
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setNplanBusy(false);
     }
   }
 
@@ -307,6 +358,57 @@ export default function Nutrition() {
               ))}
             </div>
           )}
+        </section>
+
+        {/* Plan nutrition recommandé (IA) */}
+        <section className="rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 font-medium text-neutral-900 dark:text-neutral-100">
+              <ion-icon name="restaurant-outline" className="text-base"></ion-icon>
+              Plan nutrition (IA)
+            </h2>
+            <button onClick={generatePlan} disabled={nplanBusy} className={btnCls}>
+              {nplanBusy ? (
+                <span className="inline-flex items-center gap-2">
+                  <Spinner /> Génération…
+                </span>
+              ) : nplan ? (
+                "Régénérer"
+              ) : (
+                "Générer mon plan"
+              )}
+            </button>
+          </div>
+          <input
+            value={nplanConstraints}
+            onChange={(e) => setNplanConstraints(e.target.value)}
+            placeholder="Contraintes (optionnel) : végétarien, 70 kg, allergies…"
+            className={inputCls}
+          />
+          <label className="mt-2 flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
+            <input
+              type="checkbox"
+              checked={nplanInEffort}
+              onChange={(e) => setNplanInEffort(e.target.checked)}
+              className="h-4 w-4"
+            />
+            Inclure le ravitaillement pendant l'effort
+          </label>
+          <div className="mt-4">
+            {nplanBusy ? (
+              <p className="flex items-center gap-2 text-sm text-neutral-500">
+                <Spinner /> Le coach construit ton plan nutrition…
+              </p>
+            ) : nplan ? (
+              <NutritionPlan plan={nplan} />
+            ) : (
+              <p className="text-sm text-neutral-500">
+                Aucun plan pour l'instant. Génère des repas recommandés (macros cibles +
+                explications) calibrés sur ton objectif et ta charge, puis demande une recette
+                ou des changements au coach dans l'onglet Chat.
+              </p>
+            )}
+          </div>
         </section>
 
         {/* Conseils IA */}

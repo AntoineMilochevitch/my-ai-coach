@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { listModels, setAiConfig, type AiProvider } from "../lib/api";
 import GarminPanel from "../components/GarminPanel";
@@ -33,6 +34,7 @@ const PROVIDERS: { id: AiProvider; label: string; placeholder: string; keyUrl: s
 ];
 
 export default function Profile() {
+  const navigate = useNavigate();
   const [provider, setProvider] = useState<AiProvider>("gemini");
   const [model, setModel] = useState("");
   const [models, setModels] = useState<ModelOption[]>([]);
@@ -44,6 +46,13 @@ export default function Profile() {
 
   const [garminStatus, setGarminStatus] = useState("disconnected");
   const [lastSync, setLastSync] = useState<string | null>(null);
+
+  // Profil physique
+  const [sex, setSex] = useState("");
+  const [height, setHeight] = useState("");
+  const [weight, setWeight] = useState("");
+  const [birth, setBirth] = useState("");
+  const [physioMsg, setPhysioMsg] = useState<string | null>(null);
 
   const meta = PROVIDERS.find((p) => p.id === provider)!;
   const keySet = Boolean(keys[provider]);
@@ -76,7 +85,14 @@ export default function Profile() {
 
   useEffect(() => {
     (async () => {
-      const { data: prof } = await supabase.from("profiles").select("settings").maybeSingle();
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("settings, sex, height_cm, weight_kg, birth_date")
+        .maybeSingle();
+      if (prof?.sex) setSex(prof.sex);
+      if (prof?.height_cm != null) setHeight(String(prof.height_cm));
+      if (prof?.weight_kg != null) setWeight(String(prof.weight_kg));
+      if (prof?.birth_date) setBirth(prof.birth_date);
       const s: any = prof?.settings ?? {};
       const prov: AiProvider = ["gemini", "anthropic", "openai"].includes(s.ai_provider)
         ? s.ai_provider
@@ -125,6 +141,34 @@ export default function Profile() {
     }
   }
 
+  async function savePhysio(e: FormEvent) {
+    e.preventDefault();
+    setPhysioMsg(null);
+    setError(null);
+    const { data: u } = await supabase.auth.getUser();
+    const { error: e2 } = await supabase
+      .from("profiles")
+      .update({
+        sex: sex || null,
+        height_cm: height ? Number(height) : null,
+        weight_kg: weight ? Number(weight) : null,
+        birth_date: birth || null,
+      })
+      .eq("id", u.user?.id ?? "");
+    if (e2) setError(e2.message);
+    else setPhysioMsg("Informations enregistrées — l'IA en tiendra compte.");
+  }
+
+  async function replayTutorial() {
+    const { data: prof } = await supabase.from("profiles").select("settings").maybeSingle();
+    const { data: u } = await supabase.auth.getUser();
+    await supabase
+      .from("profiles")
+      .update({ settings: { ...((prof?.settings as object) ?? {}), onboarded: false } })
+      .eq("id", u.user?.id ?? "");
+    navigate("/");
+  }
+
   const inputCls =
     "mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100";
   const btnCls =
@@ -133,9 +177,77 @@ export default function Profile() {
   return (
     <Layout>
       <main className="mx-auto w-full max-w-2xl space-y-6 p-4 sm:p-6">
-        <h1 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100">
-          Profil
-        </h1>
+        <div className="flex items-center justify-between gap-2">
+          <h1 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100">Profil</h1>
+          <button
+            onClick={replayTutorial}
+            className="text-sm text-neutral-500 underline hover:text-neutral-800 dark:hover:text-neutral-200"
+          >
+            Revoir le tutoriel
+          </button>
+        </div>
+        {/* Mes informations (profil physique) */}
+        <section className="rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+          <h2 className="flex items-center gap-2 font-medium text-neutral-900 dark:text-neutral-100">
+            <ion-icon name="body-outline" className="text-base"></ion-icon>
+            Mes informations
+          </h2>
+          <p className="mt-1 text-sm text-neutral-500">
+            Sexe, âge, taille et poids rendent les recommandations IA (nutrition, plan) plus précises.
+          </p>
+          <form onSubmit={savePhysio} className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="text-sm font-medium">Sexe</label>
+              <select value={sex} onChange={(e) => setSex(e.target.value)} className={inputCls}>
+                <option value="">—</option>
+                <option value="M">Homme</option>
+                <option value="F">Femme</option>
+                <option value="other">Autre</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Date de naissance</label>
+              <input
+                type="date"
+                value={birth}
+                onChange={(e) => setBirth(e.target.value)}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Taille (cm)</label>
+              <input
+                type="number"
+                min={100}
+                max={250}
+                value={height}
+                onChange={(e) => setHeight(e.target.value)}
+                placeholder="ex. 178"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Poids (kg)</label>
+              <input
+                type="number"
+                min={30}
+                max={250}
+                step="0.1"
+                value={weight}
+                onChange={(e) => setWeight(e.target.value)}
+                placeholder="ex. 72"
+                className={inputCls}
+              />
+            </div>
+            <div className="sm:col-span-2 flex items-center gap-3">
+              <button type="submit" className={btnCls}>
+                Enregistrer
+              </button>
+              {physioMsg && <span className="text-sm text-green-600">{physioMsg}</span>}
+            </div>
+          </form>
+        </section>
+
         {/* Assistant IA */}
         <section className="rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
           <h2 className="flex items-center gap-2 font-medium text-neutral-900 dark:text-neutral-100">

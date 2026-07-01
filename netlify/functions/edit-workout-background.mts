@@ -1,26 +1,47 @@
 /**
- * Function : edit-workout — modifie une séance EXISTANTE du plan actif (par date).
- * Régénère les étapes si la description/cible change, et délie la séance de Garmin
- * pour permettre un nouvel envoi.
+ * Function (BACKGROUND) : edit-workout-background — modifie une séance EXISTANTE
+ * du plan actif (par date), régénère les étapes si besoin, et délie la séance de
+ * Garmin (nouvel envoi possible). Écrit le résultat dans la conversation.
  *
- * POST { date, changes: { title?, description?, distance_km?, duree_min?, allure?, sessionType? } }
- *  + Authorization: Bearer <jwt>  -> { updated }
+ * POST { date, changes, conversationId? }  + Authorization: Bearer <jwt>  -> 202
  */
-import { requireUser, HttpError, json } from "./_shared/supabase.ts";
+import { requireUser } from "./_shared/supabase.ts";
 import { loadAiConfig } from "./_shared/ai-config.ts";
 import { getLlm } from "./_shared/llm/index.ts";
 import { generateWorkoutSteps } from "./_shared/workout-gen.ts";
 import { recordUsage } from "./_shared/usage.ts";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export default async (req: Request): Promise<Response> => {
-  if (req.method !== "POST") return json({ error: "POST requis" }, 405);
+  const ok = () => new Response("", { status: 202 });
+  let ctx: Awaited<ReturnType<typeof requireUser>>;
   try {
-    const { user, sb } = await requireUser(req);
-    const body = await req.json().catch(() => ({}));
-    const date = String(body.date ?? "").trim();
-    const changes = body.changes ?? {};
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date))
-      return json({ error: "Date de la séance à modifier manquante (AAAA-MM-JJ)." }, 400);
+    ctx = await requireUser(req);
+  } catch {
+    return ok();
+  }
+  const { user, sb } = ctx;
+  const body = await req.json().catch(() => ({}));
+  const date = String(body.date ?? "").trim();
+  const changes = body.changes ?? {};
+  const conversationId: string | null = body.conversationId ?? null;
+
+  const notify = async (content: string) => {
+    if (!conversationId) return;
+    await (sb as SupabaseClient)
+      .from("chat_messages")
+      .insert({ conversation_id: conversationId, user_id: user.id, role: "assistant", content })
+      .then(
+        () => {},
+        () => {},
+      );
+  };
+
+  try {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      await notify("⚠️ Date de la séance à modifier manquante (AAAA-MM-JJ).");
+      return ok();
+    }
 
     const { data: plan } = await sb
       .from("training_plans")
@@ -28,7 +49,10 @@ export default async (req: Request): Promise<Response> => {
       .eq("user_id", user.id)
       .eq("status", "active")
       .maybeSingle();
-    if (!plan) return json({ error: "Aucun plan actif." }, 400);
+    if (!plan) {
+      await notify("⚠️ Aucun plan actif.");
+      return ok();
+    }
 
     const { data: workouts } = await sb
       .from("plan_workouts")
@@ -36,8 +60,10 @@ export default async (req: Request): Promise<Response> => {
       .eq("plan_id", plan.id)
       .eq("user_id", user.id)
       .eq("scheduled_date", date);
-    if (!workouts?.length)
-      return json({ error: `Aucune séance le ${date} dans ton plan.` }, 400);
+    if (!workouts?.length) {
+      await notify(`⚠️ Aucune séance le ${date} dans ton plan.`);
+      return ok();
+    }
 
     const cfg = await loadAiConfig(sb, user);
     const llm = getLlm(cfg.provider, cfg.apiKey, cfg.model);
@@ -54,7 +80,6 @@ export default async (req: Request): Promise<Response> => {
       const description = changes.description != null ? String(changes.description) : w.description ?? "";
       const sessionType = changes.sessionType ? String(changes.sessionType) : w.session_type ?? "";
 
-      // Régénère les étapes si la description ou les cibles changent.
       let steps = w.steps;
       const changedShape =
         changes.description != null ||
@@ -81,15 +106,19 @@ export default async (req: Request): Promise<Response> => {
           session_type: sessionType || w.session_type,
           target,
           steps,
-          garmin_workout_id: null, // délie : permet un nouvel envoi sur Garmin
+          garmin_workout_id: null,
         })
         .eq("id", w.id);
       if (!error) updated++;
     }
 
-    return json({ updated });
-  } catch (err) {
-    if (err instanceof HttpError) return json({ error: err.message }, err.status);
-    return json({ error: (err as Error).message }, 500);
+    await notify(
+      updated
+        ? `✅ Séance du ${date} modifiée. Tu peux la renvoyer sur Garmin depuis l'onglet Plan.`
+        : `⚠️ La modification du ${date} n'a pas pu être enregistrée.`,
+    );
+  } catch (e) {
+    await notify(`⚠️ Impossible de modifier la séance : ${(e as Error).message.slice(0, 160)}`);
   }
+  return ok();
 };

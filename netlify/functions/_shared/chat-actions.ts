@@ -14,7 +14,8 @@ export type ActionKind =
   | "add_nutrition"
   | "add_note"
   | "create_workout"
-  | "edit_workout";
+  | "edit_workout"
+  | "nutrition_plan";
 
 export interface DetectedAction {
   kind: ActionKind;
@@ -55,6 +56,10 @@ Actions :
 - "edit_workout" : modifier une séance EXISTANTE du plan. Remplis date (jour de la séance à
   modifier) et UNIQUEMENT les champs à changer parmi : title, description, distance_km, duree_min,
   allure, sessionType.
+- "nutrition_plan" : créer ou ADAPTER le PLAN NUTRITION (repas recommandés + macros cibles). Remplis
+  constraints avec la préférence/contrainte demandée (ex. "végétarien", "70 kg", "plus de protéines",
+  "sans lactose"). À utiliser quand l'athlète demande un plan nutrition/repas, ou de le modifier.
+  Pour une simple question sur les repas déjà recommandés (recette, détail), réponds plutôt "none".
 - "none" : simple question/discussion, ou information insuffisante (le coach répondra normalement).
 
 Champs de sortie :
@@ -121,6 +126,7 @@ const VALID: ActionKind[] = [
   "add_note",
   "create_workout",
   "edit_workout",
+  "nutrition_plan",
 ];
 
 export async function detectAction(

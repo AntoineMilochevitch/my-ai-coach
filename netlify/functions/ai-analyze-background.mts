@@ -10,6 +10,7 @@ import { requireUser } from "./_shared/supabase.ts";
 import { getLlm, isRateLimit } from "./_shared/llm/index.ts";
 import { loadAiConfig } from "./_shared/ai-config.ts";
 import { checkQuota, recordUsage } from "./_shared/usage.ts";
+import { loadPhysio } from "./_shared/physio.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const SYSTEM = `# RÔLE
@@ -137,6 +138,7 @@ export default async (req: Request): Promise<Response> => {
 
     const summary = {
       periode_jours: days,
+      profil: await loadPhysio(sb, user.id),
       activites: acts.data ?? [],
       metriques_quotidiennes: metrics.data ?? [],
       sommeil: sleep.data ?? [],

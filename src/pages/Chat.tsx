@@ -10,6 +10,7 @@ import {
   adaptPlan,
   createWorkout,
   editWorkout,
+  nutritionPlanBackground,
   type ChatAction,
 } from "../lib/api";
 import Layout from "../components/Layout";
@@ -30,6 +31,7 @@ const ACTION_LABEL: Record<string, string> = {
   add_note: "Ajouter une note",
   create_workout: "Créer et envoyer une séance sur Garmin",
   edit_workout: "Modifier une séance du plan",
+  nutrition_plan: "Plan nutrition recommandé",
 };
 const ACTION_ICON: Record<string, string> = {
   create_plan: "calendar-outline",
@@ -38,6 +40,7 @@ const ACTION_ICON: Record<string, string> = {
   add_note: "document-text-outline",
   create_workout: "watch-outline",
   edit_workout: "create-outline",
+  nutrition_plan: "nutrition-outline",
 };
 const today = () => new Date().toISOString().slice(0, 10);
 interface Conversation {
@@ -237,6 +240,7 @@ export default function Chat() {
     if (!uid) return;
     setBusy(true);
     setError(null);
+    const sinceForResult = new Date().toISOString();
     try {
       if (a.kind === "create_plan") {
         await generatePlan(a.args as any);
@@ -268,11 +272,18 @@ export default function Chat() {
         });
         if (e) throw new Error(e.message);
       } else if (a.kind === "create_workout") {
-        await createWorkout(a.args);
+        await createWorkout(a.args, conversationId ?? undefined);
       } else if (a.kind === "edit_workout") {
-        await editWorkout(String(a.args.date || ""), a.args);
+        await editWorkout(String(a.args.date || ""), a.args, conversationId ?? undefined);
+      } else if (a.kind === "nutrition_plan") {
+        await nutritionPlanBackground(a.args.constraints as string | undefined);
       }
       await setActionStatus(m, "applied");
+      // Séances : générées/envoyées en arrière-plan → on attend le message résultat du coach.
+      if ((a.kind === "create_workout" || a.kind === "edit_workout") && conversationId) {
+        await pollAssistant(conversationId, sinceForResult);
+        await loadMessages(conversationId);
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -449,13 +460,14 @@ export default function Chat() {
                             ) : m.action.status === "applied" ? (
                               <p className="mt-2 inline-flex flex-wrap items-center gap-1 text-xs text-green-600">
                                 <ion-icon name="checkmark-circle-outline"></ion-icon>
-                                {m.action.kind === "create_workout" ? " Envoyée sur Garmin" : " Appliqué"}
+                                {" Appliqué"}
                                 {(m.action.kind === "create_plan" ||
                                   m.action.kind === "adapt_plan" ||
                                   m.action.kind === "edit_workout") && (
                                   <Link to="/plan" className="underline">— voir le plan</Link>
                                 )}
-                                {m.action.kind === "add_nutrition" && (
+                                {(m.action.kind === "add_nutrition" ||
+                                  m.action.kind === "nutrition_plan") && (
                                   <Link to="/nutrition" className="underline">— voir la nutrition</Link>
                                 )}
                               </p>

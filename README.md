@@ -76,6 +76,7 @@ my-ai-coach/
 │   ├── chat-background.mts      # chat coach (arrière-plan + RAG)
 │   ├── name-conversation.mts   # titre de conversation généré par l'IA
 │   ├── nutrition-advice-background.mts # conseils nutrition (arrière-plan)
+│   ├── nutrition-plan-background.mts   # plan nutrition recommandé (arrière-plan)
 │   ├── generate-plan-background.mts  # création du plan (macro + détail initial)
 │   ├── adapt-plan-background.mts     # adaptation manuelle du plan
 │   ├── match-plan.mts          # rapprochement séances ↔ activités réalisées
@@ -86,12 +87,12 @@ my-ai-coach/
 │   ├── garmin-mfa.mts          # validation MFA Garmin
 │   ├── garmin-sync.mts         # synchronisation Garmin
 │   ├── garmin-push-workout.mts # téléversement des séances vers Garmin
-│   ├── create-workout.mts      # crée une séance (IA) et l'envoie sur la montre
-│   ├── edit-workout.mts        # modifie une séance précise du plan
+│   ├── create-workout-background.mts # crée une séance (IA) → montre (arrière-plan)
+│   ├── edit-workout-background.mts   # modifie une séance précise (arrière-plan)
 │   ├── estimate-nutrition.mts  # estimation des macros d'un repas
 │   ├── scheduled-sync.mts      # cron : sync Garmin horaire
 │   └── scheduled-adapt.mts     # cron : adaptation hebdomadaire des plans
-├── supabase/migrations/        # schéma SQL (0001 → 0011)
+├── supabase/migrations/        # schéma SQL (0001 → 0015)
 ├── netlify.toml                # config de build et redirections SPA
 └── vite.config.ts
 ```
@@ -190,7 +191,7 @@ Scripts disponibles :
 
 ## Base de données
 
-Le schéma est versionné dans `supabase/migrations/` (`0001` → `0011`). Les migrations
+Le schéma est versionné dans `supabase/migrations/` (`0001` → `0015`). Les migrations
 s'appliquent dans l'ordre sur le projet Supabase (SQL Editor ou `supabase db push`).
 Après ajout de colonnes, le cache de schéma PostgREST doit être à jour (rechargement
 automatique, ou « Reload schema » côté Supabase).

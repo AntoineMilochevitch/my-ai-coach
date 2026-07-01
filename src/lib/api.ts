@@ -40,13 +40,18 @@ export const garminSync = (opts?: { activityDays?: number; dailyDays?: number })
 export const aiAnalyzeBackground = (days?: number) =>
   post<Record<string, never>>("ai-analyze-background", { days });
 
+// Message proactif du coach EN ARRIÈRE-PLAN (202). Le client interroge coach_insights.
+export const coachInsightBackground = () =>
+  post<Record<string, never>>("coach-insight-background", {});
+
 export type ChatActionKind =
   | "create_plan"
   | "adapt_plan"
   | "add_nutrition"
   | "add_note"
   | "create_workout"
-  | "edit_workout";
+  | "edit_workout"
+  | "nutrition_plan";
 export interface ChatAction {
   kind: ChatActionKind;
   args: Record<string, any>;
@@ -123,19 +128,22 @@ export const adaptPlan = () => post<Record<string, never>>("adapt-plan-backgroun
 export const pushWorkout = (opts: { planWorkoutId?: string; all?: boolean }) =>
   post<{ pushed: number; errors: string[] }>("garmin-push-workout", opts);
 
-// Crée une séance (étapes générées par IA) et l'envoie sur la montre Garmin.
-export const createWorkout = (spec: Record<string, any>) =>
-  post<{ pushed: number; garminWorkoutId: number; scheduled_date: string }>("create-workout", {
-    spec,
-  });
+// Crée une séance (IA) et l'envoie sur la montre Garmin, EN ARRIÈRE-PLAN (202).
+// Le résultat est écrit dans la conversation (chat_messages).
+export const createWorkout = (spec: Record<string, any>, conversationId?: string) =>
+  post<Record<string, never>>("create-workout-background", { spec, conversationId });
 
-// Modifie une séance existante du plan (par date).
-export const editWorkout = (date: string, changes: Record<string, any>) =>
-  post<{ updated: number }>("edit-workout", { date, changes });
+// Modifie une séance existante du plan (par date), EN ARRIÈRE-PLAN (202).
+export const editWorkout = (date: string, changes: Record<string, any>, conversationId?: string) =>
+  post<Record<string, never>>("edit-workout-background", { date, changes, conversationId });
 
 // Conseils nutrition EN ARRIÈRE-PLAN (202). Le client interroge ai_analyses (scope 'nutrition').
 export const nutritionAdviceBackground = (days?: number) =>
   post<Record<string, never>>("nutrition-advice-background", { days });
+
+// Plan nutrition (repas recommandés) EN ARRIÈRE-PLAN (202). Le client interroge nutrition_plans.
+export const nutritionPlanBackground = (constraints?: string, includeInEffort?: boolean) =>
+  post<Record<string, never>>("nutrition-plan-background", { constraints, includeInEffort });
 
 export const estimateNutrition = (description: string) =>
   post<{
