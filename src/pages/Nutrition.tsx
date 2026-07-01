@@ -166,7 +166,7 @@ export default function Nutrition() {
           setNplan(data.content as NPlan);
           break;
         }
-        if (Date.now() - start > 90000) {
+        if (Date.now() - start > 160000) {
           setError("Le plan nutrition prend trop de temps. Réessaie dans un moment.");
           break;
         }

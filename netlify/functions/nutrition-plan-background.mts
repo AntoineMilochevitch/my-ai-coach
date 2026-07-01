@@ -133,8 +133,10 @@ export default async (req: Request): Promise<Response> => {
       maxOutputTokens: 16384, // marge pour le ravitaillement pendant l'effort (JSON plus long)
       thinkingBudget: 1024,
       temperature: 0.5,
-      timeoutMs: 40000,
-      perAttemptMs: 12000,
+      // Généreux (arrière-plan) : laisse à un modèle disponible le temps de générer
+      // le gros JSON, et de basculer si le principal (ex. quota épuisé) rame.
+      timeoutMs: 120000,
+      perAttemptMs: 25000,
     });
     await recordUsage(sb, user.id, "nutrition", usage);
     await sb
