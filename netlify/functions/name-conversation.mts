@@ -58,8 +58,10 @@ export default async (req: Request): Promise<Response> => {
 
     const { text, usage } = await llm.generate(SYSTEM, transcript, {
       temperature: 0.3,
-      maxOutputTokens: 512,
-      thinkingBudget: 0,
+      maxOutputTokens: 1024,
+      thinkingBudget: 256,
+      timeoutMs: 9000,
+      perAttemptMs: 4500,
     });
     await recordUsage(sb, user.id, "chat", usage);
 

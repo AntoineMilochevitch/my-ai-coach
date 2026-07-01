@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import Layout from "../components/Layout";
 import Spinner from "../components/Spinner";
 import { generatePlan, adaptPlan, matchPlan, pushWorkout, type PlanInput } from "../lib/api";
+import StepsList, { type Step } from "../components/StepsList";
 
 interface MacroWeek {
   num: number;
@@ -22,18 +23,6 @@ interface Plan {
   macro: { resume?: string; semaines?: MacroWeek[] } | null;
   last_adapted_at: string | null;
 }
-interface Step {
-  kind?: string;
-  type?: string;
-  endType?: string;
-  durationSec?: number | null;
-  distanceM?: number | null;
-  paceLow?: string | null;
-  paceHigh?: string | null;
-  hrZone?: number | null;
-  repeatCount?: number | null;
-  steps?: Step[] | null;
-}
 interface Workout {
   id: string;
   scheduled_date: string;
@@ -51,53 +40,6 @@ interface Workout {
     zone_fc?: string | null;
   } | null;
   steps: Step[] | null;
-}
-
-const STEP_LABEL: Record<string, string> = {
-  warmup: "Échauffement",
-  run: "Footing",
-  interval: "Intervalle",
-  recovery: "Récup",
-  cooldown: "Retour au calme",
-  rest: "Repos",
-};
-function stepEnd(s: Step): string {
-  if (s.endType === "distance" && s.distanceM)
-    return s.distanceM >= 1000 ? `${(s.distanceM / 1000).toFixed(2)} km` : `${Math.round(s.distanceM)} m`;
-  if (s.endType === "time" && s.durationSec) return `${Math.round(s.durationSec / 60)} min`;
-  return "";
-}
-function stepPace(s: Step): string {
-  if (s.paceHigh || s.paceLow) return ` @ ${[s.paceHigh, s.paceLow].filter(Boolean).join("-")}/km`;
-  if (s.hrZone) return ` · FC Z${s.hrZone}`;
-  return "";
-}
-function stepLine(s: Step): string {
-  return `${STEP_LABEL[s.type ?? ""] ?? s.type ?? "Étape"} ${stepEnd(s)}${stepPace(s)}`.trim();
-}
-
-/** Détail des étapes d'une séance (gère les blocs répétés "N ×"). */
-function StepsList({ steps }: { steps: Step[] }) {
-  return (
-    <ul className="mt-2 space-y-0.5 border-l-2 border-neutral-200 pl-3 text-xs text-neutral-500 dark:border-neutral-700">
-      {steps.map((s, i) =>
-        s.kind === "repeat" && Array.isArray(s.steps) ? (
-          <li key={i}>
-            <span className="font-medium text-neutral-600 dark:text-neutral-400">
-              {Math.max(1, Math.round(s.repeatCount ?? 1))} ×
-            </span>
-            <ul className="ml-3 list-disc">
-              {s.steps.map((sub, j) => (
-                <li key={j}>{stepLine(sub)}</li>
-              ))}
-            </ul>
-          </li>
-        ) : (
-          <li key={i}>{stepLine(s)}</li>
-        ),
-      )}
-    </ul>
-  );
 }
 
 /** Semaine en cours du plan (1..numWeeks) d'après start_date (heure locale). */
@@ -644,7 +586,7 @@ export default function Plan() {
                     )}
                     {(mw?.volume_km != null || mw?.seances_qualite != null) && (
                       <span className="text-xs text-neutral-500">
-                        {mw?.volume_km != null ? `~${mw.volume_km} km` : ""}
+                        {mw?.volume_km != null ? `~${Math.round(mw.volume_km)} km` : ""}
                         {mw?.seances_qualite != null ? ` · ${mw.seances_qualite} qualité` : ""}
                       </span>
                     )}
@@ -676,8 +618,8 @@ export default function Plan() {
                         {w.target && (
                           <p className="mt-0.5 text-xs text-neutral-500">
                             {[
-                              w.target.distance_km ? `${w.target.distance_km} km` : "",
-                              w.target.duree_min ? `${w.target.duree_min} min` : "",
+                              w.target.distance_km ? `${Math.round(w.target.distance_km * 10) / 10} km` : "",
+                              w.target.duree_min ? `${Math.round(w.target.duree_min)} min` : "",
                               w.target.allure ? `allure ${w.target.allure}` : "",
                               w.target.zone_fc ? `FC ${w.target.zone_fc}` : "",
                             ].filter(Boolean).join(" · ")}

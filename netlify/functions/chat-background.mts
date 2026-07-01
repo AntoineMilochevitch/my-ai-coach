@@ -1,18 +1,21 @@
 /**
- * Function : chat — conversation avec le coach, contextualisée par les données
- * de l'utilisateur (par sport) + RAG pgvector + historique de la conversation.
- * Multi-provider (Gemini / Claude / OpenAI), en streaming.
+ * Function (BACKGROUND) : chat-background — génère la réponse du coach (ou une
+ * PROPOSITION d'action) et l'écrit dans chat_messages. Le client a déjà inséré le
+ * message utilisateur ; il interroge (poll) la table jusqu'à l'apparition de la
+ * réponse de l'assistant.
  *
- * POST { conversationId?, message }  + Authorization: Bearer <jwt supabase>
- *  -> flux texte (text/plain) + en-tête x-conversation-id
+ * En arrière-plan : pas de limite 10 s → timeouts généreux + repli sur TOUS les
+ * modèles disponibles (fonctionne même si le modèle principal est épuisé/lent).
+ *
+ * POST { conversationId }  + Authorization: Bearer <jwt>  -> 202
  */
-import { requireUser, HttpError, json } from "./_shared/supabase.ts";
-import { getLlm, type ChatTurn, type TokenUsage } from "./_shared/llm/index.ts";
+import { requireUser, HttpError } from "./_shared/supabase.ts";
+import { getLlm, isRateLimit, type ChatTurn, type TokenUsage } from "./_shared/llm/index.ts";
 import { embed } from "./_shared/embeddings.ts";
 import { loadAiConfig } from "./_shared/ai-config.ts";
 import { checkQuota, recordUsage } from "./_shared/usage.ts";
-
-const MAX_MESSAGE_CHARS = 4000;
+import { mightBeAction, detectAction } from "./_shared/chat-actions.ts";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const SYSTEM_BASE = `Tu es le coach sportif personnel de cet athlète (course/vélo/fitness).
 Tu discutes avec lui de sa forme, de son entraînement et de son plan d'entraînement.
@@ -31,102 +34,133 @@ function fmtPace(sPerKm: number | null): string {
   return `${Math.floor(sPerKm / 60)}:${String(Math.round(sPerKm % 60)).padStart(2, "0")}/km`;
 }
 
+async function writeAssistant(
+  sb: SupabaseClient,
+  conversationId: string,
+  userId: string,
+  content: string,
+  action: Record<string, unknown> | null = null,
+): Promise<void> {
+  await sb
+    .from("chat_messages")
+    .insert({ conversation_id: conversationId, user_id: userId, role: "assistant", content, action })
+    .then(
+      () => {},
+      () => {},
+    );
+}
+
 export default async (req: Request): Promise<Response> => {
-  if (req.method !== "POST") return json({ error: "POST requis" }, 405);
+  const ok202 = () => new Response("", { status: 202 });
+  let ctx: Awaited<ReturnType<typeof requireUser>>;
   try {
-    const { user, sb } = await requireUser(req);
-    const body = await req.json().catch(() => ({}));
-    const message = String(body.message ?? "").trim().slice(0, MAX_MESSAGE_CHARS);
-    if (!message) return json({ error: "message requis" }, 400);
+    ctx = await requireUser(req);
+  } catch {
+    return ok202();
+  }
+  const { user, sb } = ctx;
+  const body = await req.json().catch(() => ({}));
+  const conversationId: string | null = body.conversationId ?? null;
+  if (!conversationId) return ok202();
 
+  // Vérifie l'appartenance de la conversation.
+  const { data: conv } = await sb
+    .from("conversations")
+    .select("id")
+    .eq("id", conversationId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!conv) return ok202();
+
+  // Le dernier message doit être un message utilisateur sans réponse.
+  const { data: allMsgs } = await sb
+    .from("chat_messages")
+    .select("role, content")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true });
+  const list = (allMsgs ?? []).filter((x) => x.role === "user" || x.role === "assistant");
+  const last = list[list.length - 1];
+  if (!last || last.role !== "user") return ok202(); // rien à répondre
+  const message = String(last.content).slice(0, 4000);
+
+  try {
     await checkQuota(sb, user.id, "chat");
-    const cfg = await loadAiConfig(sb, user);
-    const llm = getLlm(cfg.provider, cfg.apiKey, cfg.model);
-    let conversationId: string | null = body.conversationId ?? null;
+  } catch (e) {
+    await writeAssistant(
+      sb,
+      conversationId,
+      user.id,
+      e instanceof HttpError ? e.message : "Limite quotidienne atteinte.",
+    );
+    return ok202();
+  }
 
-    // Conversation : vérifie l'appartenance ou en crée une.
-    if (conversationId) {
-      const { data } = await sb
-        .from("conversations")
-        .select("id")
-        .eq("id", conversationId)
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (!data) conversationId = null;
-    }
-    if (!conversationId) {
-      const { data, error } = await sb
-        .from("conversations")
-        .insert({ user_id: user.id, title: message.slice(0, 60) })
-        .select("id")
-        .single();
-      if (error) throw new Error(error.message);
-      conversationId = data.id;
-    }
+  let cfg: Awaited<ReturnType<typeof loadAiConfig>>;
+  try {
+    cfg = await loadAiConfig(sb, user);
+  } catch (e) {
+    await writeAssistant(sb, conversationId, user.id, (e as Error).message);
+    return ok202();
+  }
+  const llm = getLlm(cfg.provider, cfg.apiKey, cfg.model);
 
-    // Enregistre le message utilisateur (id conservé pour rollback si échec).
-    const { data: userMsg } = await sb
-      .from("chat_messages")
-      .insert({
-        conversation_id: conversationId,
-        user_id: user.id,
-        role: "user",
-        content: message,
-      })
-      .select("id")
-      .single();
-    const userMsgId = userMsg?.id;
+  try {
+    // --- Détection d'action (proposition confirmable) ---
+    if (mightBeAction(message)) {
+      const detected = await detectAction(llm, message);
+      if (detected.action) {
+        await recordUsage(sb, user.id, "chat", detected.usage);
+        await writeAssistant(sb, conversationId, user.id, detected.action.assistant, {
+          kind: detected.action.kind,
+          args: detected.action.args,
+          summary: detected.action.summary,
+          status: "pending",
+        });
+        return ok202();
+      }
+    }
 
     // --- Contexte athlète (scopé au user) ---
     const since90 = new Date(Date.now() - 90 * 86400000).toISOString();
-    const [actsRes, metricsRes, sleepRes, analysisRes, historyRes, notesRes] =
-      await Promise.all([
-        sb
-          .from("activities")
-          .select("activity_type, start_time, distance_m, duration_s, avg_hr, avg_pace_s_per_km")
-          .eq("user_id", user.id)
-          .gte("start_time", since90)
-          .order("start_time", { ascending: false })
-          .limit(120),
-        sb
-          .from("daily_metrics")
-          .select("metric_date, resting_hr, hrv_avg, stress_avg, vo2max, vo2max_source, training_readiness")
-          .eq("user_id", user.id)
-          .order("metric_date", { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-        sb
-          .from("sleep")
-          .select("score, total_s")
-          .eq("user_id", user.id)
-          .order("sleep_date", { ascending: false })
-          .limit(7),
-        sb
-          .from("ai_analyses")
-          .select("content_md, created_at")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-        // BUGFIX : on veut les messages RÉCENTS. descending + reverse() pour les
-        // remettre dans l'ordre chronologique (avant : ascending → on n'envoyait
-        // que les 16 PLUS ANCIENS, donc plus la question courante au-delà de 16).
-        sb
-          .from("chat_messages")
-          .select("role, content")
-          .eq("conversation_id", conversationId)
-          .order("created_at", { ascending: false })
-          .limit(16),
-        sb
-          .from("training_notes")
-          .select("note_date, content")
-          .eq("user_id", user.id)
-          .order("note_date", { ascending: false })
-          .limit(5),
-      ]);
+    const [actsRes, metricsRes, sleepRes, analysisRes, notesRes] = await Promise.all([
+      sb
+        .from("activities")
+        .select(
+          "activity_type, start_time, distance_m, duration_s, avg_hr, max_hr, avg_pace_s_per_km, training_load, aerobic_te, anaerobic_te",
+        )
+        .eq("user_id", user.id)
+        .gte("start_time", since90)
+        .order("start_time", { ascending: false })
+        .limit(120),
+      sb
+        .from("daily_metrics")
+        .select("metric_date, resting_hr, hrv_avg, stress_avg, vo2max, vo2max_source, training_readiness")
+        .eq("user_id", user.id)
+        .order("metric_date", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      sb
+        .from("sleep")
+        .select("score, total_s")
+        .eq("user_id", user.id)
+        .order("sleep_date", { ascending: false })
+        .limit(7),
+      sb
+        .from("ai_analyses")
+        .select("content_md, created_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      sb
+        .from("training_notes")
+        .select("note_date, content")
+        .eq("user_id", user.id)
+        .order("note_date", { ascending: false })
+        .limit(5),
+    ]);
 
     const acts = actsRes.data ?? [];
-    // Résumé par sport (90 j).
     const bySport = new Map<
       string,
       { n: number; km: number; paceSum: number; paceN: number; hrSum: number; hrN: number }
@@ -163,7 +197,10 @@ export default async (req: Request): Promise<Response> => {
       const km = a.distance_m ? (a.distance_m / 1000).toFixed(1) : "?";
       const min = a.duration_s ? Math.round(a.duration_s / 60) : "?";
       const pace = a.activity_type?.includes("running") ? ` ${fmtPace(a.avg_pace_s_per_km)}` : "";
-      return `- ${d} ${a.activity_type ?? "sport"} ${km} km/${min} min${pace}`;
+      const hr = a.avg_hr ? `, FC moy ${a.avg_hr}${a.max_hr ? `/max ${a.max_hr}` : ""} bpm` : "";
+      const load = a.training_load ? `, charge ${Math.round(a.training_load)}` : "";
+      const te = a.aerobic_te ? `, TE aéro ${a.aerobic_te}${a.anaerobic_te ? `/anaéro ${a.anaerobic_te}` : ""}` : "";
+      return `- ${d} ${a.activity_type ?? "sport"} ${km} km/${min} min${pace}${hr}${load}${te}`;
     });
 
     const notes = notesRes.data ?? [];
@@ -191,10 +228,7 @@ export default async (req: Request): Promise<Response> => {
           .gte("scheduled_date", today)
           .lte("scheduled_date", in7)
           .order("scheduled_date", { ascending: true }),
-        sb
-          .from("plan_workouts")
-          .select("*", { count: "exact", head: true })
-          .eq("plan_id", plan.id),
+        sb.from("plan_workouts").select("*", { count: "exact", head: true }).eq("plan_id", plan.id),
         sb
           .from("plan_workouts")
           .select("*", { count: "exact", head: true })
@@ -214,7 +248,7 @@ export default async (req: Request): Promise<Response> => {
         `### Séances des 7 prochains jours\n${lines.length ? lines.join("\n") : "- aucune"}`;
     }
 
-    // --- RAG pgvector (best-effort, nécessite une config d'embeddings) ---
+    // --- RAG pgvector (best-effort) ---
     let ragText = "";
     if (cfg.embed) {
       try {
@@ -232,7 +266,7 @@ export default async (req: Request): Promise<Response> => {
         }
         recordUsage(sb, user.id, "embed");
       } catch {
-        // RAG optionnel : on continue sans si indisponible.
+        /* RAG optionnel */
       }
     }
 
@@ -259,83 +293,40 @@ export default async (req: Request): Promise<Response> => {
 
     const system = `${SYSTEM_BASE}\n\n${context}`;
 
-    // Historique récent -> ordre chronologique -> format neutre.
-    const history = (historyRes.data ?? [])
-      .filter((msg) => msg.role === "user" || msg.role === "assistant")
-      .reverse();
-    const contents: ChatTurn[] = history.map((msg) => ({
+    // Historique -> ordre chronologique -> tours neutres (commence par "user").
+    const contents: ChatTurn[] = list.map((msg) => ({
       role: msg.role === "assistant" ? "assistant" : "user",
       text: msg.content,
     }));
-    // La conversation envoyée au modèle DOIT commencer par un tour "user"
-    // (exigé par Claude/Gemini) : on retire d'éventuels tours assistant en tête.
     while (contents.length && contents[0].role === "assistant") contents.shift();
     if (contents.length === 0) contents.push({ role: "user", text: message });
 
-    // --- Génération en streaming (provider -> flux texte vers le client) ---
-    let gen: Awaited<ReturnType<typeof llm.stream>>;
-    try {
-      gen = await llm.stream(system, contents, {
-        temperature: 0.7,
-        maxOutputTokens: 3072,
-        signal: req.signal,
-      });
-    } catch (e) {
-      // Échec avant tout token : on retire le message user pour ne pas le laisser
-      // orphelin (sans réponse) dans la conversation.
-      if (userMsgId)
-        await sb.from("chat_messages").delete().eq("id", userMsgId).then(
-          () => {},
-          () => {},
-        );
-      throw e;
+    // --- Génération (arrière-plan : on consomme le flux en entier, généreux) ---
+    const gen = await llm.stream(system, contents.slice(-16), {
+      temperature: 0.7,
+      maxOutputTokens: 3072,
+      timeoutMs: 40000,
+      perAttemptMs: 10000,
+      signal: AbortSignal.timeout(120000),
+    });
+    let full = "";
+    let usage: TokenUsage | null = null;
+    for await (const chunk of gen) {
+      if (chunk.text) full += chunk.text;
+      if (chunk.usage) usage = chunk.usage;
     }
-
-    const convId = conversationId;
-    const stream = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        const encoder = new TextEncoder();
-        let full = "";
-        let usage: TokenUsage | null = null;
-        try {
-          for await (const chunk of gen) {
-            if (chunk.text) {
-              full += chunk.text;
-              controller.enqueue(encoder.encode(chunk.text));
-            }
-            if (chunk.usage) usage = chunk.usage;
-          }
-        } catch {
-          /* déconnexion client ou coupure upstream : on persiste le partiel */
-        } finally {
-          if (full) {
-            await sb
-              .from("chat_messages")
-              .insert({
-                conversation_id: convId,
-                user_id: user.id,
-                role: "assistant",
-                content: full,
-              })
-              .then(
-                () => {},
-                () => {},
-              );
-          }
-          await recordUsage(sb, user.id, "chat", usage);
-          controller.close();
-        }
-      },
-    });
-
-    return new Response(stream, {
-      headers: {
-        "content-type": "text/plain; charset=utf-8",
-        "x-conversation-id": String(convId),
-      },
-    });
-  } catch (err) {
-    if (err instanceof HttpError) return json({ error: err.message }, err.status);
-    return json({ error: (err as Error).message }, 500);
+    await recordUsage(sb, user.id, "chat", usage);
+    await writeAssistant(
+      sb,
+      conversationId,
+      user.id,
+      full || "Désolé, je n'ai pas pu générer de réponse. Réessaie.",
+    );
+  } catch (e) {
+    const msg = isRateLimit(e)
+      ? "Limite de l'API atteinte sur les modèles disponibles. Réessaie plus tard, ou change de modèle/fournisseur dans ton profil."
+      : `Je n'ai pas pu répondre (${(e as Error).message.slice(0, 160)}).`;
+    await writeAssistant(sb, conversationId, user.id, msg);
   }
+  return ok202();
 };

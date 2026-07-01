@@ -87,6 +87,25 @@ const STEP_PROPS = {
   hrZone: { type: "INTEGER" },
 };
 
+// Schéma des étapes d'une séance (réutilisé par la génération de plan ET la
+// création/édition de séance unique).
+export const STEPS_SCHEMA = {
+  type: "ARRAY",
+  items: {
+    type: "OBJECT",
+    properties: {
+      kind: { type: "STRING" }, // "step" | "repeat"
+      ...STEP_PROPS,
+      repeatCount: { type: "INTEGER" },
+      steps: {
+        type: "ARRAY",
+        items: { type: "OBJECT", properties: STEP_PROPS, required: ["type", "endType"] },
+      },
+    },
+    required: ["kind"],
+  },
+};
+
 const SEANCE = {
   type: "OBJECT",
   properties: {
@@ -99,22 +118,7 @@ const SEANCE = {
     duree_min: { type: "INTEGER" },
     allure: { type: "STRING" },
     zone_fc: { type: "STRING" },
-    steps: {
-      type: "ARRAY",
-      items: {
-        type: "OBJECT",
-        properties: {
-          kind: { type: "STRING" }, // "step" | "repeat"
-          ...STEP_PROPS,
-          repeatCount: { type: "INTEGER" },
-          steps: {
-            type: "ARRAY",
-            items: { type: "OBJECT", properties: STEP_PROPS, required: ["type", "endType"] },
-          },
-        },
-        required: ["kind"],
-      },
-    },
+    steps: STEPS_SCHEMA,
   },
   required: ["jour", "sport", "type", "titre", "description", "steps"],
 };

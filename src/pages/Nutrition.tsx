@@ -4,7 +4,7 @@ import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import Layout from "../components/Layout";
 import Spinner from "../components/Spinner";
-import { nutritionAdvice, estimateNutrition } from "../lib/api";
+import { nutritionAdviceBackground, estimateNutrition } from "../lib/api";
 
 interface Entry {
   id: string;
@@ -56,6 +56,20 @@ export default function Nutrition() {
   useEffect(() => {
     load(date);
   }, [date, load]);
+
+  // Derniers conseils générés (affichés au retour sur la page).
+  useEffect(() => {
+    supabase
+      .from("ai_analyses")
+      .select("content_md")
+      .eq("scope", "nutrition")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.content_md) setAdvice(data.content_md);
+      });
+  }, []);
 
   async function addEntry(e: FormEvent) {
     e.preventDefault();
@@ -117,8 +131,36 @@ export default function Nutrition() {
     setAdviceBusy(true);
     setError(null);
     try {
-      const res = await nutritionAdvice(7);
-      setAdvice(res.content_md);
+      // Conseils générés en arrière-plan (robustes aux limites) : on déclenche
+      // puis on interroge ai_analyses (scope 'nutrition') jusqu'au nouveau résultat.
+      const { data: prev } = await supabase
+        .from("ai_analyses")
+        .select("created_at")
+        .eq("scope", "nutrition")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const baseline = prev?.created_at ?? "1970-01-01";
+      await nutritionAdviceBackground(7);
+      const start = Date.now();
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 2500));
+        const { data } = await supabase
+          .from("ai_analyses")
+          .select("content_md, created_at")
+          .eq("scope", "nutrition")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (data && data.created_at > baseline) {
+          setAdvice(data.content_md);
+          break;
+        }
+        if (Date.now() - start > 90000) {
+          setError("Les conseils prennent trop de temps. Réessaie dans un moment.");
+          break;
+        }
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {

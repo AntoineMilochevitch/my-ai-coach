@@ -28,6 +28,8 @@ export interface GenerateOpts {
   maxOutputTokens?: number;
   thinkingBudget?: number; // Gemini 2.5 uniquement
   signal?: AbortSignal;
+  timeoutMs?: number; // budget de temps TOTAL (réparti entre les essais de repli)
+  perAttemptMs?: number; // plafond par essai → garantit qu'un repli est tenté si un modèle pend
 }
 
 export interface StreamChunk {
@@ -60,7 +62,30 @@ export class MaxTokensError extends Error {
 }
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const RETRYABLE = new Set([429, 500, 503, 529]);
+
+/**
+ * Combine un éventuel signal d'annulation client avec un timeout. `clear()` annule
+ * le minuteur sans annuler le lien au signal client — utile pour le streaming :
+ * on borne le temps d'ÉTABLISSEMENT de la connexion, puis on libère le minuteur
+ * tout en gardant l'annulation possible si le client se déconnecte.
+ */
+export function timeoutController(
+  signal: AbortSignal | undefined,
+  ms: number | undefined,
+): { signal: AbortSignal | undefined; clear: () => void } {
+  if (!ms || ms <= 0) return { signal, clear: () => {} };
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(new Error(`Délai d'attente dépassé (${ms} ms)`)), ms);
+  if (signal) {
+    if (signal.aborted) ctrl.abort();
+    else signal.addEventListener("abort", () => ctrl.abort(), { once: true });
+  }
+  return { signal: ctrl.signal, clear: () => clearTimeout(timer) };
+}
+// On ne retente quasiment rien sur le MÊME modèle : limite (429), surcharge
+// (503/529) → on bascule vite vers un AUTRE modèle (voir getLlm + repli). Seul un
+// 500 (erreur serveur ponctuelle) est retenté une fois.
+const RETRYABLE = new Set([500]);
 
 /** POST avec retry exponentiel court sur surcharge temporaire. */
 export async function fetchRetry(

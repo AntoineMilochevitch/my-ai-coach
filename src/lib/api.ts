@@ -36,40 +36,31 @@ export const garminSync = (opts?: { activityDays?: number; dailyDays?: number })
     opts ?? {},
   );
 
-export const aiAnalyze = (days?: number) =>
-  post<{ content_md: string; created_at: string }>("ai-analyze", { days });
+// Analyse de coach EN ARRIÈRE-PLAN (202). Le client interroge ai_analyses (scope 'period').
+export const aiAnalyzeBackground = (days?: number) =>
+  post<Record<string, never>>("ai-analyze-background", { days });
 
-/** Chat en streaming : appelle onChunk au fil des tokens. Renvoie l'id de conversation. */
-export async function chatStream(
-  message: string,
-  conversationId: string | null,
-  onChunk: (text: string) => void,
-): Promise<{ conversationId: string }> {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  const res = await fetch("/.netlify/functions/chat", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify({ message, conversationId }),
-  });
-  if (!res.ok || !res.body) {
-    const j = await res.json().catch(() => ({}));
-    throw new Error(j.error || `Erreur ${res.status}`);
-  }
-  const convId = res.headers.get("x-conversation-id") || conversationId || "";
-  const reader = res.body.getReader();
-  const dec = new TextDecoder();
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const chunk = dec.decode(value, { stream: true });
-    if (chunk) onChunk(chunk);
-  }
-  return { conversationId: convId };
+export type ChatActionKind =
+  | "create_plan"
+  | "adapt_plan"
+  | "add_nutrition"
+  | "add_note"
+  | "create_workout"
+  | "edit_workout";
+export interface ChatAction {
+  kind: ChatActionKind;
+  args: Record<string, any>;
+  summary: string;
+  status: "pending" | "applied" | "cancelled";
 }
+
+/**
+ * Déclenche la génération de la réponse du coach EN ARRIÈRE-PLAN (202 immédiat).
+ * Le message utilisateur est déjà inséré côté client ; celui-ci interroge ensuite
+ * chat_messages jusqu'à l'apparition de la réponse de l'assistant.
+ */
+export const chatBackground = (conversationId: string) =>
+  post<Record<string, never>>("chat-background", { conversationId });
 
 export type AiProvider = "gemini" | "anthropic" | "openai";
 
@@ -132,8 +123,19 @@ export const adaptPlan = () => post<Record<string, never>>("adapt-plan-backgroun
 export const pushWorkout = (opts: { planWorkoutId?: string; all?: boolean }) =>
   post<{ pushed: number; errors: string[] }>("garmin-push-workout", opts);
 
-export const nutritionAdvice = (days?: number) =>
-  post<{ content_md: string }>("nutrition-advice", { days });
+// Crée une séance (étapes générées par IA) et l'envoie sur la montre Garmin.
+export const createWorkout = (spec: Record<string, any>) =>
+  post<{ pushed: number; garminWorkoutId: number; scheduled_date: string }>("create-workout", {
+    spec,
+  });
+
+// Modifie une séance existante du plan (par date).
+export const editWorkout = (date: string, changes: Record<string, any>) =>
+  post<{ updated: number }>("edit-workout", { date, changes });
+
+// Conseils nutrition EN ARRIÈRE-PLAN (202). Le client interroge ai_analyses (scope 'nutrition').
+export const nutritionAdviceBackground = (days?: number) =>
+  post<Record<string, never>>("nutrition-advice-background", { days });
 
 export const estimateNutrition = (description: string) =>
   post<{

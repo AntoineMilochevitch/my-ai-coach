@@ -6,9 +6,9 @@
 
 - [ ] **Tutoriel interactif** — parcours guidé à la première connexion : présentation du site, connexion à Garmin, mise en place de la clé API IA et choix du modèle, première synchronisation, génération d'un plan.
 
-- [ ] **Onglet Planning** — vue calendrier dédiée des séances (semaine / mois), distincte de la liste du plan.
+- [x] **Onglet Planning** — vue calendrier dédiée des séances (semaine / mois), distincte de la liste du plan. *(Fait : page `/planning`, vues semaine/mois, clic sur une séance → modale de détail (étapes, cible, envoi Garmin, marquer faite).)*
 
-- [ ] **Création d'activité depuis le chat** - le coach peut créer des activités depuis le chat, qu'on peut directement envoyé à la montre
+- [x] **Création d'activité depuis le chat** - le coach peut créer des activités depuis le chat, qu'on peut directement envoyé à la montre. *(Fait : action `create_workout` → étapes générées par IA + envoi Garmin ; et `edit_workout` pour modifier une séance précise du plan. Endpoints `create-workout` / `edit-workout`.)*
 
 - [x] **logo** - Faire un prompt pour générer un logo pour le site et le mettre dans le site et en favicon. *(Fait : logo SVG `src/components/Logo.tsx` dans l'en-tête + `public/favicon.svg`. Prompt de génération fourni si remplacement par un logo IA souhaité.)*
 
@@ -16,5 +16,6 @@
 
 - [ ] **Améliorer la nutrition** - Le but étant que dans le plan d'entrainement, l'ia me recommande des repas avec les score nutritionnel qu'il faut. Une petit explication. Je pourrais lui demander des détails sur les repas comme la recette ou lui demander de changer dans l'onglet chat.
 
-- [ ] **Amélioration du chatbot** - Le but c'est que le chatbot ai maintenant accés a des fonctions : créer un plan, modifier un plan, modifier la nutrition, d'autres fonctions a voir si pertinante. A chaque fois un bouton de confirmation dans la conversation apparait pour confirmer. Le but pouvoir discuter avec le coach et qu'il modifie donc l'entrainement.
+- [x] **Amélioration du chatbot** - Le but c'est que le chatbot ai maintenant accés a des fonctions : créer un plan, modifier un plan, modifier la nutrition, d'autres fonctions a voir si pertinante. A chaque fois un bouton de confirmation dans la conversation apparait pour confirmer. Le but pouvoir discuter avec le coach et qu'il modifie donc l'entrainement. *(Fait : actions confirmables `create_plan`, `adapt_plan`, `add_nutrition`, `add_note` via classifieur IA + carte Confirmer/Annuler dans le chat. Migration 0010. À étendre plus tard : édition d'une séance précise, et fonctions supplémentaires.)*
 
+- [x] **Model IA** - switch automatiquement de modèle quand il y a des erreurs avec le modèle pour que ça soit invisible pour l'utilisateur. *(Fait : repli automatique dans `getLlm` sur limite (429) ou modèle indisponible (403/404) → modèle suivant du même fournisseur ; 429 sans retry pour éviter les timeouts 504 ; message clair si toutes les limites sont atteintes.)*

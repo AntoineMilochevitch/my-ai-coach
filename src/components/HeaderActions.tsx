@@ -10,6 +10,7 @@ export default function HeaderActions({
   dot,
   onChat,
   onPlan,
+  onPlanning,
   onNutrition,
   onProfile,
   onSignOut,
@@ -17,6 +18,7 @@ export default function HeaderActions({
   dot: string;
   onChat: () => void;
   onPlan: () => void;
+  onPlanning: () => void;
   onNutrition: () => void;
   onProfile: () => void;
   onSignOut: () => void;
@@ -39,6 +41,10 @@ export default function HeaderActions({
         <button onClick={onPlan} className={btn}>
           <ion-icon name="calendar-outline" className="text-base"></ion-icon>
           Plan
+        </button>
+        <button onClick={onPlanning} className={btn}>
+          <ion-icon name="calendar-number-outline" className="text-base"></ion-icon>
+          Planning
         </button>
         <button onClick={onNutrition} className={btn}>
           <ion-icon name="nutrition-outline" className="text-base"></ion-icon>
@@ -87,6 +93,16 @@ export default function HeaderActions({
               >
                 <ion-icon name="calendar-outline" className="text-base"></ion-icon>
                 Plan
+              </button>
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  onPlanning();
+                }}
+                className={item}
+              >
+                <ion-icon name="calendar-number-outline" className="text-base"></ion-icon>
+                Planning
               </button>
               <button
                 onClick={() => {

@@ -10,9 +10,11 @@ import {
   fetchRetry,
   sseLines,
   extractJson,
+  timeoutController,
 } from "./types.ts";
 
 const URL = "https://api.openai.com/v1/chat/completions";
+const DEFAULT_TIMEOUT = 60000;
 
 function usageOf(u: any): TokenUsage {
   return { in: Number(u?.prompt_tokens ?? 0), out: Number(u?.completion_tokens ?? 0) };
@@ -57,23 +59,28 @@ export function openaiClient(apiKey: string, model: string): LlmClient {
     opts: GenerateOpts,
     extra: Record<string, unknown> = {},
   ): Promise<GenResult> {
-    const resp = await fetchRetry(URL, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(buildBody(system, turns, opts, extra)),
-      signal: opts.signal,
-    });
-    if (!resp.ok) {
-      const t = (await resp.text()).slice(0, 300);
-      throw new Error(`OpenAI ${resp.status}: ${t}`);
+    const tc = timeoutController(opts.signal, opts.timeoutMs ?? DEFAULT_TIMEOUT);
+    try {
+      const resp = await fetchRetry(URL, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(buildBody(system, turns, opts, extra)),
+        signal: tc.signal,
+      });
+      if (!resp.ok) {
+        const t = (await resp.text()).slice(0, 300);
+        throw new Error(`OpenAI ${resp.status}: ${t}`);
+      }
+      const body: any = await resp.json();
+      const choice = body?.choices?.[0];
+      return {
+        text: choice?.message?.content ?? "",
+        usage: usageOf(body?.usage),
+        finishReason: choice?.finish_reason,
+      };
+    } finally {
+      tc.clear();
     }
-    const body: any = await resp.json();
-    const choice = body?.choices?.[0];
-    return {
-      text: choice?.message?.content ?? "",
-      usage: usageOf(body?.usage),
-      finishReason: choice?.finish_reason,
-    };
   }
 
   return {
@@ -89,31 +96,46 @@ export function openaiClient(apiKey: string, model: string): LlmClient {
       return r;
     },
     async generateJSON(system, userText, _schema, opts = {}) {
-      const r = await call(
-        system,
-        [{ role: "user", text: userText }],
-        { temperature: 0.4, maxOutputTokens: opts.maxOutputTokens ?? 8192, ...opts },
-        { response_format: { type: "json_object" } },
-      );
+      const run = (maxTok: number) =>
+        call(
+          system,
+          [{ role: "user", text: userText }],
+          { ...opts, temperature: opts.temperature ?? 0.4, maxOutputTokens: maxTok },
+          { response_format: { type: "json_object" } },
+        );
+      let maxTok = opts.maxOutputTokens ?? 8192;
+      let r = await run(maxTok);
+      if (r.finishReason === "length" && maxTok < 32000) {
+        maxTok = Math.min(maxTok * 2, 32000);
+        r = await run(maxTok);
+      }
       if (r.finishReason === "length")
         throw new MaxTokensError(`JSON tronqué (${r.text.length} car.)`);
       if (!r.text) throw new Error("Réponse JSON OpenAI vide");
       return { data: extractJson(r.text), usage: r.usage };
     },
     async stream(system, turns, opts = {}) {
-      const resp = await fetch(URL, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(
-          buildBody(
-            system,
-            turns,
-            { temperature: 0.7, maxOutputTokens: 3072, ...opts },
-            { stream: true, stream_options: { include_usage: true } },
+      const tc = timeoutController(opts.signal, opts.timeoutMs ?? 30000);
+      let resp: Response;
+      try {
+        resp = await fetch(URL, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(
+            buildBody(
+              system,
+              turns,
+              { temperature: 0.7, maxOutputTokens: 3072, ...opts },
+              { stream: true, stream_options: { include_usage: true } },
+            ),
           ),
-        ),
-        signal: opts.signal,
-      });
+          signal: tc.signal,
+        });
+      } catch (e) {
+        tc.clear();
+        throw e;
+      }
+      tc.clear();
       if (!resp.ok || !resp.body) {
         const t = (await resp.text().catch(() => "")).slice(0, 200);
         throw new Error(`OpenAI ${resp.status}: ${t}`);

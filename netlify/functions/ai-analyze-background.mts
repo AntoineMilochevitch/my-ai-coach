@@ -1,16 +1,16 @@
 /**
- * Function : ai-analyze — analyse de coach (Gemini) sur une période.
- * POST { days? }  + Authorization: Bearer <jwt supabase>
- *  -> { content_md, created_at }
+ * Function (BACKGROUND) : ai-analyze-background — analyse de coach sur une période.
+ * Écrit le résultat dans ai_analyses (déduplication par période) ; le client
+ * interroge (poll) la table. En arrière-plan : pas de limite 10 s → timeouts
+ * généreux + repli automatique de modèle.
  *
- * Lit les données récentes de l'utilisateur (service_role, scopé au JWT),
- * construit un résumé, demande une analyse structurée à Gemini, la persiste
- * dans ai_analyses, et la renvoie.
+ * POST { days? }  + Authorization: Bearer <jwt>  -> 202
  */
-import { requireUser, HttpError, json } from "./_shared/supabase.ts";
-import { getLlm } from "./_shared/llm/index.ts";
+import { requireUser } from "./_shared/supabase.ts";
+import { getLlm, isRateLimit } from "./_shared/llm/index.ts";
 import { loadAiConfig } from "./_shared/ai-config.ts";
 import { checkQuota, recordUsage } from "./_shared/usage.ts";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const SYSTEM = `# RÔLE
 Tu es un coach d'endurance expérimenté (course à pied, vélo, natation, fitness),
@@ -56,16 +56,60 @@ Orientation pour les 1–2 prochaines semaines selon les tendances.
 - Si vo2max_source = 'calculated', précise explicitement que la VO₂max est une estimation.
 - Pas de disclaimer médical générique superflu.`;
 
+async function writeAnalysis(
+  sb: SupabaseClient,
+  userId: string,
+  periodStart: string,
+  periodEnd: string,
+  model: string | null,
+  content: string,
+  context: unknown = null,
+): Promise<void> {
+  await sb
+    .from("ai_analyses")
+    .delete()
+    .eq("user_id", userId)
+    .eq("scope", "period")
+    .eq("period_start", periodStart)
+    .eq("period_end", periodEnd);
+  await sb
+    .from("ai_analyses")
+    .insert({
+      user_id: userId,
+      scope: "period",
+      period_start: periodStart,
+      period_end: periodEnd,
+      model,
+      content_md: content,
+      context,
+    })
+    .then(
+      () => {},
+      () => {},
+    );
+}
+
 export default async (req: Request): Promise<Response> => {
-  if (req.method !== "POST") return json({ error: "POST requis" }, 405);
+  const ok202 = () => new Response("", { status: 202 });
+  let ctx: Awaited<ReturnType<typeof requireUser>>;
   try {
-    const { user, sb } = await requireUser(req);
+    ctx = await requireUser(req);
+  } catch {
+    return ok202();
+  }
+  const { user, sb } = ctx;
+  const body = await req.json().catch(() => ({}));
+  const days = Math.min(Math.max(Number(body.days) || 30, 7), 120);
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  const periodStart = since.slice(0, 10);
+  const periodEnd = new Date().toISOString().slice(0, 10);
+  let model: string | null = null;
+
+  try {
     await checkQuota(sb, user.id, "analyze");
     const cfg = await loadAiConfig(sb, user);
+    model = cfg.model;
     const llm = getLlm(cfg.provider, cfg.apiKey, cfg.model);
-    const body = await req.json().catch(() => ({}));
-    const days = Math.min(Math.max(Number(body.days) || 30, 7), 120);
-    const since = new Date(Date.now() - days * 86400000).toISOString();
 
     const [acts, metrics, sleep] = await Promise.all([
       sb
@@ -79,9 +123,7 @@ export default async (req: Request): Promise<Response> => {
         .limit(60),
       sb
         .from("daily_metrics")
-        .select(
-          "metric_date,resting_hr,hrv_avg,stress_avg,vo2max,vo2max_source,training_readiness",
-        )
+        .select("metric_date,resting_hr,hrv_avg,stress_avg,vo2max,vo2max_source,training_readiness")
         .eq("user_id", user.id)
         .order("metric_date", { ascending: false })
         .limit(14),
@@ -101,10 +143,16 @@ export default async (req: Request): Promise<Response> => {
     };
 
     if ((summary.activites as unknown[]).length === 0) {
-      return json(
-        { error: "Aucune activité sur la période — synchronise d'abord ton Garmin." },
-        400,
+      await writeAnalysis(
+        sb,
+        user.id,
+        periodStart,
+        periodEnd,
+        model,
+        "## 📊 Bilan\n\nAucune activité sur la période — synchronise d'abord ton Garmin depuis ton profil.",
+        summary,
       );
+      return ok202();
     }
 
     const userText =
@@ -113,37 +161,19 @@ export default async (req: Request): Promise<Response> => {
       JSON.stringify(summary, null, 2) +
       "\n```";
 
-    // Budget de réflexion borné (Gemini 2.5) pour laisser de la place à la
-    // réponse et éviter une sortie vide/tronquée ; ignoré par les autres providers.
     const { text: content, usage } = await llm.generate(SYSTEM, userText, {
       maxOutputTokens: 4096,
       thinkingBudget: 1024,
+      timeoutMs: 40000,
+      perAttemptMs: 12000,
     });
     await recordUsage(sb, user.id, "analyze", usage);
-
-    const period_end = new Date().toISOString().slice(0, 10);
-    const period_start = since.slice(0, 10);
-    // Déduplication : une seule analyse par (scope, période).
-    await sb
-      .from("ai_analyses")
-      .delete()
-      .eq("user_id", user.id)
-      .eq("scope", "period")
-      .eq("period_start", period_start)
-      .eq("period_end", period_end);
-    await sb.from("ai_analyses").insert({
-      user_id: user.id,
-      scope: "period",
-      period_start,
-      period_end,
-      model: cfg.model,
-      content_md: content,
-      context: summary,
-    });
-
-    return json({ content_md: content, created_at: new Date().toISOString() });
-  } catch (err) {
-    if (err instanceof HttpError) return json({ error: err.message }, err.status);
-    return json({ error: (err as Error).message }, 500);
+    await writeAnalysis(sb, user.id, periodStart, periodEnd, model, content, summary);
+  } catch (e) {
+    const msg = isRateLimit(e)
+      ? "## ⚠️ Analyse indisponible\n\nLimite de l'API atteinte sur les modèles disponibles. Réessaie plus tard, ou change de modèle/fournisseur dans ton profil."
+      : `## ⚠️ Analyse indisponible\n\n${(e as Error).message.slice(0, 160)}`;
+    await writeAnalysis(sb, user.id, periodStart, periodEnd, model, msg);
   }
+  return ok202();
 };

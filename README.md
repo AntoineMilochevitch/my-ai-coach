@@ -10,7 +10,7 @@ Conçue multi-utilisateurs dès l'origine (isolation par `user_id` via RLS). Auc
 
 - **Tableau de bord** — agrégats d'activités (volume, allure, FC, VO₂max, records), graphes de tendances (volume, allure, FC), filtres par période et par sport.
 - **Coach IA — analyse de période** — bilan structuré en Markdown (état de forme, points forts, vigilances, recommandations chiffrées) à partir des données récentes.
-- **Chat coach** — conversation contextualisée par les données de l'athlète, le plan actif, les notes et un RAG sémantique (pgvector). Réponses en streaming, historique des conversations, titre généré automatiquement, édition et régénération des messages.
+- **Chat coach** — conversation contextualisée par les données de l'athlète, le plan actif, les notes et un RAG sémantique (pgvector). Réponses générées en arrière-plan (robustes aux limites de débit, avec repli automatique de modèle), historique des conversations, titre généré automatiquement, édition et régénération des messages. **Actions confirmables** : le coach peut proposer de créer/adapter un plan, ajouter un repas ou une note, créer et envoyer une séance sur la montre, ou modifier une séance précise — validés par l'athlète depuis la conversation.
 - **Plan d'entraînement adaptatif glissant** — squelette de périodisation (macro) généré une fois, détail des séances matérialisé sur une fenêtre de quelques semaines, ré-adapté à l'état de forme réel (réalisé vs cible, récupération, nutrition, notes)
   manuellement ou automatiquement chaque semaine. Téléversement des séances structurées vers Garmin Connect.
 - **Nutrition** — saisie des repas et conseils IA croisés avec la charge d'entraînement.
@@ -58,7 +58,7 @@ Netlify Functions (service_role, secrets serveur)
 ```
 my-ai-coach/
 ├── src/                         # Frontend React (SPA)
-│   ├── pages/                   # Dashboard, Chat, Plan, Nutrition, Profile, Login
+│   ├── pages/                   # Dashboard, Chat, Plan, Planning, Nutrition, Profile, Login
 │   ├── components/              # Layout, Charts, GarminPanel, CoachAnalysis, Notes, …
 │   └── lib/                     # client Supabase, auth, appels API, types, formatage
 ├── netlify/functions/          # Endpoints serverless
@@ -72,10 +72,10 @@ my-ai-coach/
 │   │   ├── crypto.ts           # chiffrement AES-256-GCM
 │   │   ├── dates.ts            # dates calendaires dans le fuseau de l'athlète
 │   │   └── supabase.ts         # client service_role + vérification JWT
-│   ├── ai-analyze.mts          # analyse de période
-│   ├── chat.mts                # chat coach (streaming + RAG)
+│   ├── ai-analyze-background.mts     # analyse de période (arrière-plan)
+│   ├── chat-background.mts      # chat coach (arrière-plan + RAG)
 │   ├── name-conversation.mts   # titre de conversation généré par l'IA
-│   ├── nutrition-advice.mts    # conseils nutrition
+│   ├── nutrition-advice-background.mts # conseils nutrition (arrière-plan)
 │   ├── generate-plan-background.mts  # création du plan (macro + détail initial)
 │   ├── adapt-plan-background.mts     # adaptation manuelle du plan
 │   ├── match-plan.mts          # rapprochement séances ↔ activités réalisées
@@ -86,9 +86,12 @@ my-ai-coach/
 │   ├── garmin-mfa.mts          # validation MFA Garmin
 │   ├── garmin-sync.mts         # synchronisation Garmin
 │   ├── garmin-push-workout.mts # téléversement des séances vers Garmin
+│   ├── create-workout.mts      # crée une séance (IA) et l'envoie sur la montre
+│   ├── edit-workout.mts        # modifie une séance précise du plan
+│   ├── estimate-nutrition.mts  # estimation des macros d'un repas
 │   ├── scheduled-sync.mts      # cron : sync Garmin horaire
 │   └── scheduled-adapt.mts     # cron : adaptation hebdomadaire des plans
-├── supabase/migrations/        # schéma SQL (0001 → 0009)
+├── supabase/migrations/        # schéma SQL (0001 → 0011)
 ├── netlify.toml                # config de build et redirections SPA
 └── vite.config.ts
 ```
@@ -187,7 +190,7 @@ Scripts disponibles :
 
 ## Base de données
 
-Le schéma est versionné dans `supabase/migrations/` (`0001` → `0009`). Les migrations
+Le schéma est versionné dans `supabase/migrations/` (`0001` → `0011`). Les migrations
 s'appliquent dans l'ordre sur le projet Supabase (SQL Editor ou `supabase db push`).
 Après ajout de colonnes, le cache de schéma PostgREST doit être à jour (rechargement
 automatique, ou « Reload schema » côté Supabase).

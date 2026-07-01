@@ -5,6 +5,7 @@ import Dashboard from "./pages/Dashboard";
 import Chat from "./pages/Chat";
 import Profile from "./pages/Profile";
 import Plan from "./pages/Plan";
+import Planning from "./pages/Planning";
 import Nutrition from "./pages/Nutrition";
 
 export default function App() {
@@ -39,6 +40,10 @@ export default function App() {
       <Route
         path="/plan"
         element={session ? <Plan /> : <Navigate to="/login" replace />}
+      />
+      <Route
+        path="/planning"
+        element={session ? <Planning /> : <Navigate to="/login" replace />}
       />
       <Route
         path="/nutrition"

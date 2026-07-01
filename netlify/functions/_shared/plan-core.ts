@@ -38,7 +38,7 @@ export async function generateMacro(
     SYSTEM_MACRO,
     userText,
     SCHEMA_MACRO,
-    { maxOutputTokens: 8192, thinkingBudget: 1024, temperature: 0.5 },
+    { maxOutputTokens: 16384, thinkingBudget: 1536, temperature: 0.5 },
   );
   usage.in += u.in;
   usage.out += u.out;
@@ -78,7 +78,7 @@ export async function generateDetail(
       SYSTEM_DETAIL,
       userText,
       SCHEMA_DETAIL,
-      { maxOutputTokens: 12288, thinkingBudget: 2048, temperature: 0.5 },
+      { maxOutputTokens: 16384, thinkingBudget: 2048, temperature: 0.5 },
     );
     usage.in += u.in;
     usage.out += u.out;
