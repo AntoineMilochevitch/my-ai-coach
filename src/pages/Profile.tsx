@@ -1,12 +1,20 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { listModels, setAiConfig, type AiProvider } from "../lib/api";
 import GarminPanel from "../components/GarminPanel";
 import UsagePanel from "../components/UsagePanel";
 import CoachMemory from "../components/CoachMemory";
 import Layout from "../components/Layout";
+import Tabs, { type TabDef } from "../components/Tabs";
 import Spinner from "../components/Spinner";
+
+const PROFILE_TABS: TabDef[] = [
+  { key: "compte", label: "Compte & Garmin", icon: "watch-outline" },
+  { key: "infos", label: "Mes infos", icon: "body-outline" },
+  { key: "coach", label: "Mémoire coach", icon: "bookmarks-outline" },
+  { key: "ia", label: "IA & quotas", icon: "sparkles-outline" },
+];
 
 interface ModelOption {
   id: string;
@@ -170,6 +178,11 @@ export default function Profile() {
     navigate("/");
   }
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const profileTab = searchParams.get("t") ?? "compte";
+  const setProfileTab = (k: string) =>
+    setSearchParams(k === "compte" ? {} : { t: k }, { replace: true });
+
   const inputCls =
     "mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100";
   const btnCls =
@@ -187,7 +200,12 @@ export default function Profile() {
             Revoir le tutoriel
           </button>
         </div>
-        {/* Mes informations (profil physique) */}
+
+        <Tabs tabs={PROFILE_TABS} active={profileTab} onChange={setProfileTab} />
+
+        <div key={profileTab} className="animate-tabpanel space-y-6">
+        {profileTab === "infos" && (
+        /* Mes informations (profil physique) */
         <section className="rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
           <h2 className="flex items-center gap-2 font-medium text-neutral-900 dark:text-neutral-100">
             <ion-icon name="body-outline" className="text-base"></ion-icon>
@@ -248,10 +266,12 @@ export default function Profile() {
             </div>
           </form>
         </section>
+        )}
 
-        {/* Mémoire du coach */}
-        <CoachMemory />
+        {profileTab === "coach" && <CoachMemory />}
 
+        {profileTab === "ia" && (
+        <>
         {/* Assistant IA */}
         <section className="rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
           <h2 className="flex items-center gap-2 font-medium text-neutral-900 dark:text-neutral-100">
@@ -352,8 +372,11 @@ export default function Profile() {
 
         {/* Consommation IA */}
         <UsagePanel />
+        </>
+        )}
 
-        {/* Garmin */}
+        {profileTab === "compte" && (
+        /* Garmin */
         <section className="rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
           <h2 className="flex items-center gap-2 font-medium text-neutral-900 dark:text-neutral-100">
             <ion-icon name="watch-outline" className="text-base"></ion-icon>
@@ -363,6 +386,8 @@ export default function Profile() {
             <GarminPanel status={garminStatus} lastSync={lastSync} onSynced={loadGarmin} />
           </div>
         </section>
+        )}
+        </div>
       </main>
     </Layout>
   );

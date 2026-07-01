@@ -9,6 +9,40 @@ body,
   height: 100%;
 }
 
+/* --- Transitions & utilitaires UI --- */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-tabpanel {
+  animation: fade-in-up 0.24s ease-out;
+}
+.animate-fade {
+  animation: fade-in-up 0.2s ease-out;
+}
+
+/* Barre d'onglets scrollable, sans scrollbar visible */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-tabpanel,
+  .animate-fade {
+    animation: none;
+  }
+}
+
 /* Rendu de l'analyse IA (react-markdown) — Tailwind v4 réinitialise ces balises. */
 .markdown h2 {
   font-size: 0.95rem;
