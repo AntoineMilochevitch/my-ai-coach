@@ -4,7 +4,7 @@
 
 - [x] **Apport nutritionnel généré par l'IA** — faire estimer par le modèle les valeurs nutritionnelles (calories, protéines, glucides, lipides) d'un repas à partir de sa description, au lieu d'une saisie manuelle. *(Fait : endpoint `estimate-nutrition` + bouton « Estimer les valeurs (IA) » sur la page Nutrition.)*
 
-- [ ] **Tutoriel interactif** — parcours guidé à la première connexion : présentation du site, connexion à Garmin, mise en place de la clé API IA et choix du modèle, première synchronisation, génération d'un plan.
+- [x] **Tutoriel interactif** — parcours guidé à la première connexion : présentation du site, connexion à Garmin, mise en place de la clé API IA et choix du modèle, première synchronisation, génération d'un plan. *(Fait : modale d'onboarding sur le Dashboard avec checklist à statut live (clé IA + modèle, Garmin, synchro, plan) et boutons de raccourci ; persistance via `profiles.settings.onboarded` ; bouton « Revoir le tutoriel » dans le Profil.)*
 
 - [x] **Onglet Planning** — vue calendrier dédiée des séances (semaine / mois), distincte de la liste du plan. *(Fait : page `/planning`, vues semaine/mois, clic sur une séance → modale de détail (étapes, cible, envoi Garmin, marquer faite).)*
 

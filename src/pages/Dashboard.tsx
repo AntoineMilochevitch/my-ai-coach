@@ -5,6 +5,7 @@ import Spinner from "../components/Spinner";
 import CoachAnalysis from "../components/CoachAnalysis";
 import Notes from "../components/Notes";
 import ActivityLogModal, { type ActivityLog } from "../components/ActivityLogModal";
+import Onboarding from "../components/Onboarding";
 import { HrTrendChart, PaceTrendChart, VolumeChart } from "../components/Charts";
 import type { Activity } from "../lib/types";
 import { formatDuration, formatKm, formatPace, weekStart } from "../lib/format";
@@ -280,6 +281,8 @@ export default function Dashboard() {
           }}
         />
       )}
+
+      <Onboarding />
     </Layout>
   );
 }

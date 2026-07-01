@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { listModels, setAiConfig, type AiProvider } from "../lib/api";
 import GarminPanel from "../components/GarminPanel";
@@ -33,6 +34,7 @@ const PROVIDERS: { id: AiProvider; label: string; placeholder: string; keyUrl: s
 ];
 
 export default function Profile() {
+  const navigate = useNavigate();
   const [provider, setProvider] = useState<AiProvider>("gemini");
   const [model, setModel] = useState("");
   const [models, setModels] = useState<ModelOption[]>([]);
@@ -125,6 +127,16 @@ export default function Profile() {
     }
   }
 
+  async function replayTutorial() {
+    const { data: prof } = await supabase.from("profiles").select("settings").maybeSingle();
+    const { data: u } = await supabase.auth.getUser();
+    await supabase
+      .from("profiles")
+      .update({ settings: { ...((prof?.settings as object) ?? {}), onboarded: false } })
+      .eq("id", u.user?.id ?? "");
+    navigate("/");
+  }
+
   const inputCls =
     "mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100";
   const btnCls =
@@ -133,9 +145,15 @@ export default function Profile() {
   return (
     <Layout>
       <main className="mx-auto w-full max-w-2xl space-y-6 p-4 sm:p-6">
-        <h1 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100">
-          Profil
-        </h1>
+        <div className="flex items-center justify-between gap-2">
+          <h1 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100">Profil</h1>
+          <button
+            onClick={replayTutorial}
+            className="text-sm text-neutral-500 underline hover:text-neutral-800 dark:hover:text-neutral-200"
+          >
+            Revoir le tutoriel
+          </button>
+        </div>
         {/* Assistant IA */}
         <section className="rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
           <h2 className="flex items-center gap-2 font-medium text-neutral-900 dark:text-neutral-100">
