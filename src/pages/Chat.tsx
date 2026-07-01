@@ -319,7 +319,7 @@ export default function Chat() {
 
   return (
     <Layout>
-      <div className="relative flex min-h-0 w-full flex-1 overflow-hidden">
+      <div className="relative flex h-[calc(100dvh-3.5rem)] w-full overflow-hidden">
         {/* Overlay mobile */}
         {sidebarOpen && (
           <div

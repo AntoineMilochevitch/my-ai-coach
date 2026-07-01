@@ -26,8 +26,8 @@ export default function Layout({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div className="flex min-h-screen flex-col bg-neutral-50 dark:bg-neutral-950">
-      <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-neutral-200 bg-white/90 px-4 py-3 backdrop-blur sm:px-6 dark:border-neutral-800 dark:bg-neutral-900/90">
+    <div className="flex min-h-dvh flex-col bg-neutral-50 dark:bg-neutral-950">
+      <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-neutral-200 bg-white/90 px-4 backdrop-blur sm:px-6 dark:border-neutral-800 dark:bg-neutral-900/90">
         <Link to="/" className="flex items-center gap-2">
           <Logo className="h-7 w-7" />
           <span className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
