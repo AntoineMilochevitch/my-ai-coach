@@ -100,6 +100,7 @@ export default async (req: Request): Promise<Response> => {
       zones: context.zones,
       charge: context.charge,
       charge_resume: loadText(context.charge) || null,
+      memoire: context.memoire.length ? context.memoire : null,
       objectif: plan?.goal ?? null,
       derniere_seance: derniereSeance,
       recuperation: context.recuperation,

@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabase";
 import { listModels, setAiConfig, type AiProvider } from "../lib/api";
 import GarminPanel from "../components/GarminPanel";
 import UsagePanel from "../components/UsagePanel";
+import CoachMemory from "../components/CoachMemory";
 import Layout from "../components/Layout";
 import Spinner from "../components/Spinner";
 
@@ -247,6 +248,9 @@ export default function Profile() {
             </div>
           </form>
         </section>
+
+        {/* Mémoire du coach */}
+        <CoachMemory />
 
         {/* Assistant IA */}
         <section className="rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">

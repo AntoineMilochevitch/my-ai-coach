@@ -51,7 +51,8 @@ export type ChatActionKind =
   | "add_note"
   | "create_workout"
   | "edit_workout"
-  | "nutrition_plan";
+  | "nutrition_plan"
+  | "remember";
 export interface ChatAction {
   kind: ChatActionKind;
   args: Record<string, any>;

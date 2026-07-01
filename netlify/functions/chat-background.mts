@@ -19,6 +19,7 @@ import { loadPhysio, physioLine } from "./_shared/physio.ts";
 import { athleteZones, zonesText } from "./_shared/zones.ts";
 import { trainingLoad, loadText } from "./_shared/training-load.ts";
 import { racePredictions, predictText } from "./_shared/predict.ts";
+import { loadMemory, memoryText } from "./_shared/memory.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const SYSTEM_BASE = `Tu es le coach sportif personnel de cet athlète (course/vélo/fitness).
@@ -325,9 +326,11 @@ export default async (req: Request): Promise<Response> => {
     const zText = zonesText(await athleteZones(sb, user.id));
     const cText = loadText(await trainingLoad(sb, user.id));
     const pText = predictText(await racePredictions(sb, user.id));
+    const mText = memoryText(await loadMemory(sb, user.id));
 
     const context = [
       "# CONTEXTE ATHLÈTE",
+      mText ? `## Mémoire du coach (faits durables à respecter)\n${mText}` : "",
       physioText ? `## Profil\n${physioText}` : "",
       zText ? `## Zones perso\n${zText}` : "",
       cText ? `## Charge d'entraînement\n${cText}` : "",

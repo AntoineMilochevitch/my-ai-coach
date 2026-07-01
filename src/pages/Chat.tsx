@@ -32,6 +32,7 @@ const ACTION_LABEL: Record<string, string> = {
   create_workout: "Créer et envoyer une séance sur Garmin",
   edit_workout: "Modifier une séance du plan",
   nutrition_plan: "Plan nutrition recommandé",
+  remember: "Mémoriser (mémoire du coach)",
 };
 const ACTION_ICON: Record<string, string> = {
   create_plan: "calendar-outline",
@@ -41,6 +42,7 @@ const ACTION_ICON: Record<string, string> = {
   create_workout: "watch-outline",
   edit_workout: "create-outline",
   nutrition_plan: "nutrition-outline",
+  remember: "bookmark-outline",
 };
 const today = () => new Date().toISOString().slice(0, 10);
 interface Conversation {
@@ -277,6 +279,20 @@ export default function Chat() {
         await editWorkout(String(a.args.date || ""), a.args, conversationId ?? undefined);
       } else if (a.kind === "nutrition_plan") {
         await nutritionPlanBackground(a.args.constraints as string | undefined);
+      } else if (a.kind === "remember") {
+        const VALID_CATS = ["objectif", "blessure", "preference", "contrainte", "autre"];
+        const list = Array.isArray(a.args.memories) ? a.args.memories : [];
+        const rows = list
+          .filter((it: any) => it && String(it.content || "").trim())
+          .map((it: any) => ({
+            user_id: uid,
+            category: VALID_CATS.includes(String(it.category)) ? String(it.category) : "autre",
+            content: String(it.content).trim().slice(0, 400),
+          }));
+        if (rows.length) {
+          const { error: e } = await supabase.from("coach_memory").insert(rows);
+          if (e) throw new Error(e.message);
+        }
       }
       await setActionStatus(m, "applied");
       // Séances : générées/envoyées en arrière-plan → on attend le message résultat du coach.

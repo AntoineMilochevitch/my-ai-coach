@@ -35,6 +35,8 @@ nutrition, ressenti). Détaille les séances de CES semaines.
     dégradation, nutrition insuffisante) → réduis l'intensité et/ou le volume, ajoute de la récup.
   * bonne forme (réalisé conforme, récup bonne) → progression normale, voire légèrement plus.
 - Tiens compte des NOTES (douleurs, contraintes) et des jours d'entraînement préférés.
+- RESPECTE la "memoire" du coach si fournie (blessures/santé → prudence, contraintes/jours dispo,
+  préférences de séances). Ne programme rien qui contredise une blessure ou une contrainte connue.
 
 # VARIÉTÉ
 Chaque semaine : footings faciles, UNE sortie longue, AU MOINS UNE séance de qualité
