@@ -138,8 +138,10 @@ export async function detectAction(
     temperature: 0.1,
     maxOutputTokens: 2048, // marge pour la réflexion des modèles 2.5 + le JSON
     thinkingBudget: 256, // petit budget POSITIF (0 est refusé par certains 2.5)
-    timeoutMs: 7000, // budget total (sous le timeout Netlify, chemin synchrone)
-    perAttemptMs: 3500, // un modèle lent/surchargé laisse la place au repli
+    // Généreux : appelé en ARRIÈRE-PLAN (pas de limite 10 s). perAttemptMs borne
+    // chaque essai pour vraiment basculer sur un autre modèle si l'un pend.
+    timeoutMs: 40000,
+    perAttemptMs: 10000,
   });
   const kind = data.action as ActionKind;
   if (!VALID.includes(kind)) return { action: null, usage };

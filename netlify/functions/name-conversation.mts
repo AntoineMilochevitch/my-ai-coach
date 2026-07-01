@@ -60,7 +60,8 @@ export default async (req: Request): Promise<Response> => {
       temperature: 0.3,
       maxOutputTokens: 1024,
       thinkingBudget: 256,
-      timeoutMs: 7000,
+      timeoutMs: 9000,
+      perAttemptMs: 4500,
     });
     await recordUsage(sb, user.id, "chat", usage);
 

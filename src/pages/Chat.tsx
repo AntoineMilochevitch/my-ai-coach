@@ -4,7 +4,7 @@ import Markdown from "react-markdown";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import {
-  chatStream,
+  chatBackground,
   nameConversation,
   generatePlan,
   adaptPlan,
@@ -100,36 +100,81 @@ export default function Chat() {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, busy]);
 
+  // Attend l'apparition de la réponse de l'assistant (écrite par la fonction
+  // d'arrière-plan). Renvoie true si trouvée, false après expiration.
+  async function pollAssistant(convId: string, sinceIso: string): Promise<boolean> {
+    const start = Date.now();
+    while (Date.now() - start < 180000) {
+      await new Promise((r) => setTimeout(r, 2500));
+      const { data } = await supabase
+        .from("chat_messages")
+        .select("id")
+        .eq("conversation_id", convId)
+        .eq("role", "assistant")
+        .gt("created_at", sinceIso)
+        .limit(1)
+        .maybeSingle();
+      if (data) return true;
+    }
+    return false;
+  }
+
   async function doSend(text: string) {
+    const uid = session?.user.id;
+    if (!uid) return;
     setBusy(true);
     setError(null);
     const wasNew = !conversationId;
-    // Bulles optimistes : message user + réponse assistant (vide, remplie en streaming).
-    setMessages((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "" }]);
+    let convId = conversationId;
     try {
-      const { conversationId: convId } = await chatStream(text, conversationId, (chunk) => {
-        setMessages((m) => {
-          const copy = [...m];
-          const last = copy[copy.length - 1];
-          if (last?.role === "assistant") copy[copy.length - 1] = { ...last, content: last.content + chunk };
-          return copy;
-        });
-      });
-      setConversationId(convId);
-      if (convId) await loadMessages(convId); // récupère ids/created_at pour l'édition
-      if (wasNew && convId) {
-        await loadConversations();
-        // Titre généré par l'IA (non bloquant pour l'UI).
-        nameConversation(convId)
-          .then(({ title }) =>
-            setConversations((cs) => cs.map((c) => (c.id === convId ? { ...c, title } : c))),
-          )
-          .catch(() => {});
+      // 1. Conversation (créée si nouvelle).
+      if (!convId) {
+        const { data, error: e } = await supabase
+          .from("conversations")
+          .insert({ user_id: uid, title: text.slice(0, 60) })
+          .select("id")
+          .single();
+        if (e) throw new Error(e.message);
+        convId = data.id;
+        setConversationId(convId);
+      }
+      // 2. Message utilisateur.
+      const { data: um, error: e2 } = await supabase
+        .from("chat_messages")
+        .insert({ conversation_id: convId, user_id: uid, role: "user", content: text })
+        .select("id, created_at")
+        .single();
+      if (e2) throw new Error(e2.message);
+      // Bulles optimistes : message user + réponse assistant (spinner pendant l'attente).
+      setMessages((m) => [
+        ...m,
+        { id: um.id, created_at: um.created_at, role: "user", content: text },
+        { role: "assistant", content: "" },
+      ]);
+      // 3. Génération EN ARRIÈRE-PLAN, puis attente de la réponse.
+      await chatBackground(convId as string);
+      const ok = await pollAssistant(convId as string, um.created_at as string);
+      if (!ok) {
+        setError("Le coach met vraiment trop de temps. Réessaie dans un moment.");
+        setMessages((m) =>
+          m[m.length - 1]?.role === "assistant" && !m[m.length - 1].content ? m.slice(0, -1) : m,
+        );
+      } else {
+        await loadMessages(convId as string); // récupère la réponse (texte ou carte d'action)
+        if (wasNew) {
+          await loadConversations();
+          nameConversation(convId as string)
+            .then(({ title }) =>
+              setConversations((cs) => cs.map((c) => (c.id === convId ? { ...c, title } : c))),
+            )
+            .catch(() => {});
+        }
       }
     } catch (err) {
       setError((err as Error).message);
-      // retire la bulle assistant vide
-      setMessages((m) => (m[m.length - 1]?.role === "assistant" && !m[m.length - 1].content ? m.slice(0, -1) : m));
+      setMessages((m) =>
+        m[m.length - 1]?.role === "assistant" && !m[m.length - 1].content ? m.slice(0, -1) : m,
+      );
     } finally {
       setBusy(false);
     }

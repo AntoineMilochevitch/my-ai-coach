@@ -53,7 +53,8 @@ export default async (req: Request): Promise<Response> => {
       temperature: 0.2,
       maxOutputTokens: 2048,
       thinkingBudget: 256,
-      timeoutMs: 8000,
+      timeoutMs: 9000,
+      perAttemptMs: 4500, // bascule vers un autre modèle si le principal pend
     });
     await recordUsage(sb, user.id, "estimate", usage);
 

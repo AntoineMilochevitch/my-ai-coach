@@ -52,59 +52,14 @@ export interface ChatAction {
   summary: string;
   status: "pending" | "applied" | "cancelled";
 }
-export interface ChatProposal {
-  messageId: string | null;
-  content: string;
-  action: ChatAction;
-}
 
 /**
- * Chat : appelle onChunk au fil des tokens (réponse texte streamée), OU renvoie
- * une `proposal` si le coach propose une action confirmable (pas de streaming).
+ * Déclenche la génération de la réponse du coach EN ARRIÈRE-PLAN (202 immédiat).
+ * Le message utilisateur est déjà inséré côté client ; celui-ci interroge ensuite
+ * chat_messages jusqu'à l'apparition de la réponse de l'assistant.
  */
-export async function chatStream(
-  message: string,
-  conversationId: string | null,
-  onChunk: (text: string) => void,
-): Promise<{ conversationId: string; proposal?: ChatProposal }> {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  const res = await fetch("/.netlify/functions/chat", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify({ message, conversationId }),
-  });
-
-  // Réponse JSON = erreur OU proposition d'action ; sinon flux texte.
-  const ct = res.headers.get("content-type") || "";
-  if (ct.includes("application/json")) {
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(j.error || `Erreur ${res.status}`);
-    return {
-      conversationId: j.conversationId || conversationId || "",
-      proposal: j.action
-        ? { messageId: j.messageId ?? null, content: j.content ?? "", action: j.action }
-        : undefined,
-    };
-  }
-  if (!res.ok || !res.body) {
-    const j = await res.json().catch(() => ({}));
-    throw new Error(j.error || `Erreur ${res.status}`);
-  }
-  const convId = res.headers.get("x-conversation-id") || conversationId || "";
-  const reader = res.body.getReader();
-  const dec = new TextDecoder();
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const chunk = dec.decode(value, { stream: true });
-    if (chunk) onChunk(chunk);
-  }
-  return { conversationId: convId };
-}
+export const chatBackground = (conversationId: string) =>
+  post<Record<string, never>>("chat-background", { conversationId });
 
 export type AiProvider = "gemini" | "anthropic" | "openai";
 

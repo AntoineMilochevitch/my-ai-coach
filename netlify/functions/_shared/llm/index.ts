@@ -15,7 +15,16 @@ export { MaxTokensError } from "./types.ts";
 // Modèles de repli par provider (du plus capable/économe au plus léger). Le
 // modèle choisi par l'utilisateur est toujours essayé en premier.
 const FALLBACKS: Record<Provider, string[]> = {
-  gemini: ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"],
+  // Ordre = du plus récent/dispo au plus ancien. Les modèles absents de la clé
+  // renvoient 404 et sont sautés automatiquement (voir shouldFallback).
+  gemini: [
+    "gemini-3.5-flash",
+    "gemini-2.5-flash",
+    "gemini-flash-latest",
+    "gemini-2.5-flash-lite",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+  ],
   anthropic: ["claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
   openai: ["gpt-4o-mini", "gpt-4o"],
 };
