@@ -19,3 +19,16 @@
 - [x] **Amélioration du chatbot** - Le but c'est que le chatbot ai maintenant accés a des fonctions : créer un plan, modifier un plan, modifier la nutrition, d'autres fonctions a voir si pertinante. A chaque fois un bouton de confirmation dans la conversation apparait pour confirmer. Le but pouvoir discuter avec le coach et qu'il modifie donc l'entrainement. *(Fait : actions confirmables `create_plan`, `adapt_plan`, `add_nutrition`, `add_note` via classifieur IA + carte Confirmer/Annuler dans le chat. Migration 0010. À étendre plus tard : édition d'une séance précise, et fonctions supplémentaires.)*
 
 - [x] **Model IA** - switch automatiquement de modèle quand il y a des erreurs avec le modèle pour que ça soit invisible pour l'utilisateur. *(Fait : repli automatique dans `getLlm` sur limite (429) ou modèle indisponible (403/404) → modèle suivant du même fournisseur ; 429 sans retry pour éviter les timeouts 504 ; message clair si toutes les limites sont atteintes.)*
+
+- [x] **Profil physique** - sexe, âge, taille, poids → contexte IA plus précis (macros g/kg, besoins caloriques…). *(Fait : section « Mes informations » + migration 0014 + branché dans plan/nutrition/chat/analyses.)*
+
+## Roadmap améliorations (ordre de réalisation)
+
+- [x] **1. Coach proactif** — le coach vient à toi : message/bilan automatique (dernière séance commentée, alerte si signal, 1 conseil) sur le Dashboard, généré avec parcimonie (seulement si périmé). Inclut l'**analyse auto post-séance** et la **carte « Message du coach »**. *(Fait : `coach-insight-background` (court, 1 appel) + table `coach_insights` (0015) + carte `CoachInsight` en haut du Dashboard, auto-générée seulement si ≥ 20 h et données présentes, + bouton Actualiser.)*
+- [ ] **2. Zones perso FC & allure** — récupérer les zones depuis Garmin (ou les calculer) et les utiliser dans les séances + les afficher.
+- [ ] **3. Détection de surcharge** — ratio charge aiguë/chronique (ACWR) + tendances récup → alerte (alimente le coach proactif).
+- [ ] **4. Prédiction de performance** — estimer des chronos réalistes (VDOT) et aider à fixer l'objectif.
+- [ ] **5. Mémoire du coach** — profil athlète persistant (objectifs, blessures, préférences) que le coach met à jour et réutilise entre conversations.
+- [ ] **6. Graphes de récupération** — HRV, readiness, sommeil, charge, poids sur le Dashboard.
+- [ ] **7. Page détail d'activité** — clic sur une activité → détail complet (splits, FC, TE) + journal ressenti/ravito.
+- [ ] **8. Thème clair / sombre** — toggle dédié (au lieu de suivre le système).

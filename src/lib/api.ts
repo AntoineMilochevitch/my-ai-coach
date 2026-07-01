@@ -40,6 +40,10 @@ export const garminSync = (opts?: { activityDays?: number; dailyDays?: number })
 export const aiAnalyzeBackground = (days?: number) =>
   post<Record<string, never>>("ai-analyze-background", { days });
 
+// Message proactif du coach EN ARRIÈRE-PLAN (202). Le client interroge coach_insights.
+export const coachInsightBackground = () =>
+  post<Record<string, never>>("coach-insight-background", {});
+
 export type ChatActionKind =
   | "create_plan"
   | "adapt_plan"

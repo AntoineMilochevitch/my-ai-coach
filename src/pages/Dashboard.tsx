@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import Layout from "../components/Layout";
 import Spinner from "../components/Spinner";
 import CoachAnalysis from "../components/CoachAnalysis";
+import CoachInsight from "../components/CoachInsight";
 import Notes from "../components/Notes";
 import ActivityLogModal, { type ActivityLog } from "../components/ActivityLogModal";
 import Onboarding from "../components/Onboarding";
@@ -128,6 +129,9 @@ export default function Dashboard() {
             <Spinner /> Chargement de tes données…
           </p>
         )}
+
+        {/* Message proactif du coach */}
+        <CoachInsight />
 
         {/* Barre d'outils : zoom timeline + tri par sport */}
         <div className="flex flex-wrap items-center justify-between gap-3">
