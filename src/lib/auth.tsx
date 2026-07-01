@@ -62,7 +62,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signUp(email: string, password: string) {
-    const { error } = await supabase.auth.signUp({ email, password });
+    // Redirige la confirmation vers l'origine courante (local en dev, site en prod).
+    // Ces URLs doivent figurer dans Supabase → Auth → URL Configuration → Redirect URLs.
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: window.location.origin },
+    });
     if (error) throw error;
   }
 

@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import HeaderActions from "./HeaderActions";
+import ThemeToggle from "./ThemeToggle";
 import Logo from "./Logo";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -34,15 +35,18 @@ export default function Layout({ children }: { children: ReactNode }) {
             my-ai-coach
           </span>
         </Link>
-        <HeaderActions
-          dot={dot}
-          onChat={() => navigate("/chat")}
-          onPlan={() => navigate("/plan")}
-          onPlanning={() => navigate("/planning")}
-          onNutrition={() => navigate("/nutrition")}
-          onProfile={() => navigate("/profile")}
-          onSignOut={signOut}
-        />
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <HeaderActions
+            dot={dot}
+            onChat={() => navigate("/chat")}
+            onPlan={() => navigate("/plan")}
+            onPlanning={() => navigate("/planning")}
+            onNutrition={() => navigate("/nutrition")}
+            onProfile={() => navigate("/profile")}
+            onSignOut={signOut}
+          />
+        </div>
       </header>
       {children}
     </div>

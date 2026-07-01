@@ -15,7 +15,8 @@ export type ActionKind =
   | "add_note"
   | "create_workout"
   | "edit_workout"
-  | "nutrition_plan";
+  | "nutrition_plan"
+  | "remember";
 
 export interface DetectedAction {
   kind: ActionKind;
@@ -27,7 +28,7 @@ export interface DetectedAction {
 // Pré-filtre : n'appelle le classifieur que si le message évoque une action,
 // pour ne pas payer un appel IA supplémentaire sur la conversation courante.
 const HINT =
-  /\b(cr[ée]e|cr[ée]er|g[ée]n[èe]re|fais[ -]?moi|construis|pr[ée]pare|adapte|ajuste|recalcule|modifie|change|remplace|ajoute|enregistre|note|plan|programme|objectif|s[ée]ance|repas|mang|d[ée]jeuner|d[îi]ner|petit[ -]?d[ée]jeuner|collation|calorie|prot[ée]ine|glucide)/i;
+  /\b(cr[ée]e|cr[ée]er|g[ée]n[èe]re|fais[ -]?moi|construis|pr[ée]pare|adapte|ajuste|recalcule|modifie|change|remplace|ajoute|enregistre|note|plan|programme|objectif|s[ée]ance|repas|mang|d[ée]jeuner|d[îi]ner|petit[ -]?d[ée]jeuner|collation|calorie|prot[ée]ine|glucide|bless|mal\b|douleur|genou|cheville|tendon|pr[ée]f[èe]r|d[ée]teste|[ée]vite|contrainte|dispo|retiens|retenir|souviens|rappelle|m[ée]moris)/i;
 
 export function mightBeAction(message: string): boolean {
   return HINT.test(message);
@@ -60,6 +61,12 @@ Actions :
   constraints avec la préférence/contrainte demandée (ex. "végétarien", "70 kg", "plus de protéines",
   "sans lactose"). À utiliser quand l'athlète demande un plan nutrition/repas, ou de le modifier.
   Pour une simple question sur les repas déjà recommandés (recette, détail), réponds plutôt "none".
+- "remember" : MÉMORISER un/des fait(s) DURABLE(s) sur l'athlète, utile(s) au coach dans le temps
+  (objectif de fond, blessure/douleur/historique médical, préférence d'entraînement, contrainte
+  d'emploi du temps/matériel, jours dispo). Remplis memories[] {category, content} avec
+  category ∈ (objectif|blessure|preference|contrainte|autre) et content = fait COURT et factuel.
+  N'utilise remember QUE pour une info durable/réutilisable ; PAS pour un ressenti ponctuel du jour
+  (→ add_note), ni un repas (→ add_nutrition), ni une simple question.
 - "none" : simple question/discussion, ou information insuffisante (le coach répondra normalement).
 
 Champs de sortie :
@@ -113,6 +120,14 @@ const SCHEMA = {
         distance_km: { type: "NUMBER" },
         duree_min: { type: "INTEGER" },
         allure: { type: "STRING" },
+        memories: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: { category: { type: "STRING" }, content: { type: "STRING" } },
+            required: ["content"],
+          },
+        },
       },
     },
   },
@@ -127,6 +142,7 @@ const VALID: ActionKind[] = [
   "create_workout",
   "edit_workout",
   "nutrition_plan",
+  "remember",
 ];
 
 export async function detectAction(

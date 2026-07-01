@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import Layout from "../components/Layout";
+import Tabs, { type TabDef } from "../components/Tabs";
 import Spinner from "../components/Spinner";
 import CoachAnalysis from "../components/CoachAnalysis";
 import CoachInsight from "../components/CoachInsight";
+import MyZones from "../components/MyZones";
+import TrainingLoad from "../components/TrainingLoad";
+import RacePredictions from "../components/RacePredictions";
+import RecoveryCharts from "../components/RecoveryCharts";
 import Notes from "../components/Notes";
 import ActivityLogModal, { type ActivityLog } from "../components/ActivityLogModal";
 import Onboarding from "../components/Onboarding";
@@ -20,7 +26,19 @@ type RangeKey = (typeof RANGES)[number]["key"];
 
 const prettySport = (s: string) => s.replaceAll("_", " ");
 
+const TABS: TabDef[] = [
+  { key: "apercu", label: "Aperçu", icon: "pulse-outline" },
+  { key: "activites", label: "Activités", icon: "list-outline" },
+  { key: "perf", label: "Zones & perf", icon: "speedometer-outline" },
+  { key: "coach", label: "Coach", icon: "chatbubbles-outline" },
+];
+
 export default function Dashboard() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get("t") ?? "apercu";
+  const setTab = (k: string) =>
+    setSearchParams(k === "apercu" ? {} : { t: k }, { replace: true });
   const [activities, setActivities] = useState<Activity[]>([]);
   const [vo2max, setVo2max] = useState<number | null>(null);
   const [vo2Source, setVo2Source] = useState<string | null>(null);
@@ -130,139 +148,170 @@ export default function Dashboard() {
           </p>
         )}
 
-        {/* Message proactif du coach */}
+        {/* Message proactif du coach (toujours visible) */}
         <CoachInsight />
 
-        {/* Barre d'outils : zoom timeline + tri par sport */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="inline-flex rounded-lg border border-neutral-300 p-0.5 dark:border-neutral-700">
-            {RANGES.map((r) => (
-              <button
-                key={r.key}
-                onClick={() => setRangeKey(r.key)}
-                className={`rounded-md px-3 py-1 text-sm transition ${
-                  rangeKey === r.key
-                    ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                    : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                }`}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
+        <Tabs tabs={TABS} active={tab} onChange={setTab} />
 
-          <select
-            value={sport}
-            onChange={(e) => setSport(e.target.value)}
-            className={selectCls}
-            aria-label="Filtrer par sport"
-          >
-            <option value="all">Tous les sports</option>
-            {sports.map((s) => (
-              <option key={s} value={s}>
-                {prettySport(s)}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Cartes d'information */}
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card label={`Activités (${range.label})`} value={String(filtered.length)} />
-          <Card label="Distance totale" value={formatKm(stats.totalKm * 1000)} />
-          <Vo2Card value={vo2max} source={vo2Source} />
-          <Card label="FC repos" value={restingHr ? `${restingHr} bpm` : "—"} />
-        </section>
-
-        {/* Records (sur la période) */}
-        <section className="grid gap-4 sm:grid-cols-3">
-          <Card label="Plus longue sortie" value={formatKm(stats.longest)} />
-          <Card label="Meilleure allure (course)" value={formatPace(stats.bestPace)} />
-          <Card
-            label="Meilleure semaine"
-            value={stats.bestWeek ? `${stats.bestWeek.toFixed(1)} km` : "—"}
-          />
-        </section>
-
-        {/* Coach IA */}
-        <CoachAnalysis days={Math.min(range.days, 120)} />
-
-        {/* Notes libres (alimentent le coach IA) */}
-        <Notes />
-
-        {/* Graphes */}
-        <section className="grid gap-4 lg:grid-cols-2">
-          <VolumeChart activities={filtered} bucket={range.bucket} />
-          <PaceTrendChart activities={filtered} />
-          <HrTrendChart activities={filtered} />
-        </section>
-
-        {/* Tableau des activités */}
-        <section className="rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
-          <h2 className="font-medium text-neutral-900 dark:text-neutral-100">
-            Activités récentes
-          </h2>
-          {filtered.length === 0 ? (
-            <p className="mt-2 text-sm text-neutral-500">
-              Aucune activité sur cette période. Connecte/synchronise ton Garmin depuis
-              ton Profil (icône en haut à droite).
-            </p>
-          ) : (
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-neutral-500">
-                    <th className="py-2 pr-4">Date</th>
-                    <th className="py-2 pr-4">Type</th>
-                    <th className="py-2 pr-4">Distance</th>
-                    <th className="py-2 pr-4">Durée</th>
-                    <th className="py-2 pr-4">Allure</th>
-                    <th className="py-2 pr-4">FC moy.</th>
-                    <th className="py-2 text-right">Journal</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.slice(0, 25).map((a) => {
-                    const hasLog = Boolean(logs[a.id]);
-                    return (
-                      <tr
-                        key={a.id}
-                        className="border-t border-neutral-100 dark:border-neutral-800"
-                      >
-                        <td className="py-2 pr-4">
-                          {a.start_time
-                            ? new Date(a.start_time).toLocaleDateString("fr-FR")
-                            : "—"}
-                        </td>
-                        <td className="py-2 pr-4">
-                          {a.activity_type ? prettySport(a.activity_type) : "—"}
-                        </td>
-                        <td className="py-2 pr-4">{formatKm(a.distance_m)}</td>
-                        <td className="py-2 pr-4">{formatDuration(a.duration_s)}</td>
-                        <td className="py-2 pr-4">
-                          {a.activity_type?.includes("running")
-                            ? formatPace(a.avg_pace_s_per_km)
-                            : "—"}
-                        </td>
-                        <td className="py-2 pr-4">{a.avg_hr ?? "—"}</td>
-                        <td className="py-2 text-right">
-                          <button
-                            onClick={() => setLogActivity(a)}
-                            title={hasLog ? "Modifier le ressenti / ravitaillement" : "Ajouter ressenti / ravitaillement"}
-                            className={`inline-flex items-center gap-1 text-xs ${hasLog ? "text-green-600" : "text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"}`}
-                          >
-                            <ion-icon name={hasLog ? "checkmark-circle-outline" : "add-circle-outline"}></ion-icon>
-                            {hasLog ? "Noté" : "Noter"}
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+        <div key={tab} className="animate-tabpanel space-y-6">
+          {/* ---------------- Aperçu : forme du jour ---------------- */}
+          {tab === "apercu" && (
+            <>
+              <TrainingLoad />
+              <RecoveryCharts />
+            </>
           )}
-        </section>
+
+          {/* ---------------- Activités ---------------- */}
+          {tab === "activites" && (
+            <>
+              {/* Barre d'outils : zoom timeline + tri par sport */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="inline-flex rounded-lg border border-neutral-300 p-0.5 dark:border-neutral-700">
+                  {RANGES.map((r) => (
+                    <button
+                      key={r.key}
+                      onClick={() => setRangeKey(r.key)}
+                      className={`rounded-md px-3 py-1 text-sm transition ${
+                        rangeKey === r.key
+                          ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
+                          : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                      }`}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+
+                <select
+                  value={sport}
+                  onChange={(e) => setSport(e.target.value)}
+                  className={selectCls}
+                  aria-label="Filtrer par sport"
+                >
+                  <option value="all">Tous les sports</option>
+                  {sports.map((s) => (
+                    <option key={s} value={s}>
+                      {prettySport(s)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Cartes d'information */}
+              <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <Card label={`Activités (${range.label})`} value={String(filtered.length)} />
+                <Card label="Distance totale" value={formatKm(stats.totalKm * 1000)} />
+                <Vo2Card value={vo2max} source={vo2Source} />
+                <Card label="FC repos" value={restingHr ? `${restingHr} bpm` : "—"} />
+              </section>
+
+              {/* Records (sur la période) */}
+              <section className="grid gap-4 sm:grid-cols-3">
+                <Card label="Plus longue sortie" value={formatKm(stats.longest)} />
+                <Card label="Meilleure allure (course)" value={formatPace(stats.bestPace)} />
+                <Card
+                  label="Meilleure semaine"
+                  value={stats.bestWeek ? `${stats.bestWeek.toFixed(1)} km` : "—"}
+                />
+              </section>
+
+              {/* Graphes */}
+              <section className="grid gap-4 lg:grid-cols-2">
+                <VolumeChart activities={filtered} bucket={range.bucket} />
+                <PaceTrendChart activities={filtered} />
+                <HrTrendChart activities={filtered} />
+              </section>
+
+              {/* Tableau des activités */}
+              <section className="rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+                <h2 className="font-medium text-neutral-900 dark:text-neutral-100">
+                  Activités récentes
+                </h2>
+                {filtered.length === 0 ? (
+                  <p className="mt-2 text-sm text-neutral-500">
+                    Aucune activité sur cette période. Connecte/synchronise ton Garmin depuis
+                    ton Profil (icône en haut à droite).
+                  </p>
+                ) : (
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-neutral-500">
+                          <th className="py-2 pr-4">Date</th>
+                          <th className="py-2 pr-4">Type</th>
+                          <th className="py-2 pr-4">Distance</th>
+                          <th className="py-2 pr-4">Durée</th>
+                          <th className="py-2 pr-4">Allure</th>
+                          <th className="py-2 pr-4">FC moy.</th>
+                          <th className="py-2 text-right">Journal</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.slice(0, 25).map((a) => {
+                          const hasLog = Boolean(logs[a.id]);
+                          return (
+                            <tr
+                              key={a.id}
+                              onClick={() => navigate(`/activity/${a.id}`)}
+                              className="cursor-pointer border-t border-neutral-100 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800/40"
+                            >
+                              <td className="py-2 pr-4">
+                                {a.start_time
+                                  ? new Date(a.start_time).toLocaleDateString("fr-FR")
+                                  : "—"}
+                              </td>
+                              <td className="py-2 pr-4">
+                                {a.activity_type ? prettySport(a.activity_type) : "—"}
+                              </td>
+                              <td className="py-2 pr-4">{formatKm(a.distance_m)}</td>
+                              <td className="py-2 pr-4">{formatDuration(a.duration_s)}</td>
+                              <td className="py-2 pr-4">
+                                {a.activity_type?.includes("running")
+                                  ? formatPace(a.avg_pace_s_per_km)
+                                  : "—"}
+                              </td>
+                              <td className="py-2 pr-4">{a.avg_hr ?? "—"}</td>
+                              <td className="py-2 text-right">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setLogActivity(a);
+                                  }}
+                                  title={hasLog ? "Modifier le ressenti / ravitaillement" : "Ajouter ressenti / ravitaillement"}
+                                  className={`inline-flex items-center gap-1 text-xs ${hasLog ? "text-green-600" : "text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"}`}
+                                >
+                                  <ion-icon name={hasLog ? "checkmark-circle-outline" : "add-circle-outline"}></ion-icon>
+                                  {hasLog ? "Noté" : "Noter"}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            </>
+          )}
+
+          {/* ---------------- Zones & performance ---------------- */}
+          {tab === "perf" && (
+            <>
+              <MyZones />
+              <RacePredictions />
+            </>
+          )}
+
+          {/* ---------------- Coach ---------------- */}
+          {tab === "coach" && (
+            <>
+              <CoachAnalysis days={Math.min(range.days, 120)} />
+              <Notes />
+            </>
+          )}
+        </div>
       </main>
 
       {logActivity && (

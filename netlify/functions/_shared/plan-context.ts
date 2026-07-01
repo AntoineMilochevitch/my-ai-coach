@@ -8,6 +8,9 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadPhysio, type Physio } from "./physio.ts";
+import { athleteZones, type Zones } from "./zones.ts";
+import { trainingLoad, type LoadBalance } from "./training-load.ts";
+import { loadMemory, type MemoryItem } from "./memory.ts";
 
 function fmtPace(sPerKm: number | null | undefined): string | null {
   if (!sPerKm || sPerKm <= 0) return null;
@@ -16,6 +19,9 @@ function fmtPace(sPerKm: number | null | undefined): string | null {
 
 export interface AthleteContext {
   profil: Physio | null;
+  zones: Zones | null;
+  charge: LoadBalance | null;
+  memoire: MemoryItem[];
   activites_recentes: any[];
   recuperation: {
     indicateurs_recents: any[];
@@ -160,10 +166,18 @@ export async function buildAthleteContext(
     }
   }
 
-  const profil = await loadPhysio(sb, userId);
+  const [profil, zones, charge, memoire] = await Promise.all([
+    loadPhysio(sb, userId),
+    athleteZones(sb, userId),
+    trainingLoad(sb, userId),
+    loadMemory(sb, userId),
+  ]);
 
   return {
     profil,
+    zones,
+    charge,
+    memoire,
     activites_recentes,
     recuperation: {
       indicateurs_recents: metricsRes.data ?? [],

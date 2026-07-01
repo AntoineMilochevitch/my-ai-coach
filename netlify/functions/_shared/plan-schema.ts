@@ -35,12 +35,19 @@ nutrition, ressenti). Détaille les séances de CES semaines.
     dégradation, nutrition insuffisante) → réduis l'intensité et/ou le volume, ajoute de la récup.
   * bonne forme (réalisé conforme, récup bonne) → progression normale, voire légèrement plus.
 - Tiens compte des NOTES (douleurs, contraintes) et des jours d'entraînement préférés.
+- RESPECTE la "memoire" du coach si fournie (blessures/santé → prudence, contraintes/jours dispo,
+  préférences de séances). Ne programme rien qui contredise une blessure ou une contrainte connue.
 
 # VARIÉTÉ
 Chaque semaine : footings faciles, UNE sortie longue, AU MOINS UNE séance de qualité
 (tempo/seuil OU intervalles/VO2) avec allures cibles CHIFFRÉES (paceLow/paceHigh) dérivées
 de l'objectif. jour = entier 1..7 (1=lundi … 7=dimanche). type ∈ {easy, long, tempo,
 interval, recovery, rest, cross, strength}.
+
+# ZONES PERSO (si "zones" fourni dans le contexte)
+Cale les allures cibles et les hrZone sur les ZONES PERSONNELLES de l'athlète (FC et allures
+issues de sa FCmax/VO2max réelles) : footing en zone Facile/Endurance, tempo au Seuil,
+intervalles en zone Intervalle/VO2max. N'invente pas d'allures incohérentes avec ces zones.
 
 # ÉTAPES ("steps") cohérentes avec la description
 - kind = "step" (étape simple) ou "repeat" (bloc répété).

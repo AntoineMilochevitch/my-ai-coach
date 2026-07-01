@@ -51,7 +51,8 @@ export type ChatActionKind =
   | "add_note"
   | "create_workout"
   | "edit_workout"
-  | "nutrition_plan";
+  | "nutrition_plan"
+  | "remember";
 export interface ChatAction {
   kind: ChatActionKind;
   args: Record<string, any>;
@@ -156,3 +157,57 @@ export const estimateNutrition = (description: string) =>
 
 export const nameConversation = (conversationId: string) =>
   post<{ title: string }>("name-conversation", { conversationId });
+
+export interface Zones {
+  hr_max: number | null;
+  hr_max_source: string | null;
+  resting_hr: number | null;
+  vo2max: number | null;
+  hr: { method: string; zones: { n: number; label: string; min: number; max: number }[] } | null;
+  pace: { method: string; zones: { label: string; pace: string }[] } | null;
+  garmin: {
+    threshold_pace: string | null;
+    lthr: number | null;
+    hr_max: number | null;
+    has_hr_floors: boolean;
+    fetched_at: string | null;
+  } | null;
+}
+
+// Zones perso (FC + allure), calculées côté serveur depuis les données de l'athlète.
+export const getZones = () => post<Zones | Record<string, never>>("zones", {});
+
+// Récupère les zones depuis Garmin Connect EN ARRIÈRE-PLAN (202). Le client
+// re-interroge ensuite getZones() pour voir la source « Garmin ».
+export const garminZonesRefresh = () =>
+  post<Record<string, never>>("garmin-zones-background", {});
+
+export type LoadStatus = "detraining" | "optimal" | "high" | "very_high";
+export interface LoadBalance {
+  acute_7d: number;
+  chronic_weekly: number;
+  acwr: number | null;
+  status: LoadStatus | null;
+  weekly: { start: string; load: number }[];
+  trend_pct: number | null;
+}
+
+// Équilibre de charge (ACWR), calculé côté serveur depuis training_load.
+export const getTrainingLoad = () =>
+  post<LoadBalance | Record<string, never>>("training-load", {});
+
+export interface RacePrediction {
+  label: string;
+  distance_m: number;
+  time_s: number;
+  pace_s_per_km: number;
+}
+export interface Predictions {
+  vdot: number;
+  source: string;
+  races: RacePrediction[];
+}
+
+// Prédictions de chronos (VDOT), calculées côté serveur.
+export const getRacePredictions = () =>
+  post<Predictions | Record<string, never>>("race-predictions", {});
